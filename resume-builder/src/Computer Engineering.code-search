@@ -1,0 +1,13 @@
+# Query: Computer Engineering
+# ContextLines: 1
+
+2 results - 1 file
+
+resume-builder\src\App.jsx:
+  60      title: "Your Job",
+  61:     about: "Computer Engineering student at Apollo Institute. Focused on Java development and React ecosystems.",
+  62      phone: "+91 00000-00000",
+
+  94          institution: "Apollo Institute of Engineering and Technology",
+  95:         degree: "Bachelor of Engineering (Computer Engineering)",
+  96          years: "2024 - 2028",
