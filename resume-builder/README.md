@@ -8,7 +8,6 @@ A modern, interactive resume builder built with React and Vite. Create professio
 - 📱 Responsive design
 - 🎯 Live preview with real-time editing
 - 📄 High-quality PDF export
-- 🤖 AI-powered content suggestions (requires Gemini API key)
 - 💾 Auto-save functionality
 - 🎨 Customizable colors and fonts
 - 📊 Import/Export resume data
