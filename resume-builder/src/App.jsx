@@ -4,6 +4,8 @@ import { Phone, Mail, MapPin, Trash2, Globe, Github, Linkedin, Moon, Sun } from 
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import LoadingSpinner from './components/LoadingSpinner';
+import { suggestSkills, suggestBulletPoints, generateSummary, improveContent } from './api/genai';
+
 
 
 const getLightColor = (hex, opacity = 0.2) => {
@@ -26,6 +28,23 @@ const App = () => {
   const [zoom, setZoom] = useState(0.9);
 
   const [showGuidance, setShowGuidance] = useState(false);
+
+  // AI Demo State
+  const [aiPrompt, setAiPrompt] = useState('');
+  const [aiResponse, setAiResponse] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
+  // AI Suggestions State
+  const [apiKey, setApiKey] = useState('');
+  const [skillInput, setSkillInput] = useState('');
+  const [roleInput, setRoleInput] = useState('');
+  const [companyInput, setCompanyInput] = useState('');
+  const [improveInput, setImproveInput] = useState('');
+  const [suggestedSkills, setSuggestedSkills] = useState([]);
+  const [suggestedBullets, setSuggestedBullets] = useState([]);
+  const [summaryText, setSummaryText] = useState('');
+  const [improvedText, setImprovedText] = useState('');
+  const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
 
 
 
@@ -115,7 +134,7 @@ const App = () => {
 
         tech: "React, Tailwind CSS, jsPDF",
         years: "2026",
-        description: "Built a dynamic resume builder with live preview, PDF export, and AI-assisted content suggestions."
+        description: "Built a dynamic resume builder with live preview and PDF export."
       }
     ],
     education: [
@@ -418,99 +437,69 @@ const App = () => {
     }
   };
 
-  // AI Functions
+  // AI Suggestion Functions
+  const handleSuggestSkills = async () => {
+    if (!skillInput.trim()) return;
+    setAiSuggestionLoading(true);
+    try {
+      const skills = await suggestSkills(skillInput, apiKey || undefined);
+      setSuggestedSkills(skills);
+    } catch (error) {
+      alert('Error suggesting skills: ' + error.message);
+    } finally {
+      setAiSuggestionLoading(false);
+    }
+  };
+
+  const handleSuggestBullets = async () => {
+    if (!roleInput.trim() || !companyInput.trim()) return;
+    setAiSuggestionLoading(true);
+    try {
+      const bullets = await suggestBulletPoints(roleInput, companyInput, apiKey || undefined);
+      setSuggestedBullets(bullets);
+    } catch (error) {
+      alert('Error suggesting bullet points: ' + error.message);
+    } finally {
+      setAiSuggestionLoading(false);
+    }
+  };
+
   const handleGenerateSummary = async () => {
-    if (!apiKeyValid) {
-      alert("Please enter and validate your Gemini API Key first!");
-      return;
-    }
-    setAiLoading(prev => ({ ...prev, summary: true }));
+    setAiSuggestionLoading(true);
     try {
-      const education = formData.education[0];
-      const skills = formData.techSkills.languages.join(', ');
-      const summary = await generateSummary({
-        title: formData.title,
-        college: education?.institution,
-        skills
-      }, userKey);
-      setFormData(prev => ({ ...prev, about: summary }));
+      const summary = await generateSummary(formData, apiKey || undefined);
+      setSummaryText(summary);
     } catch (error) {
-      alert(error.message);
+      alert('Error generating summary: ' + error.message);
     } finally {
-      setAiLoading(prev => ({ ...prev, summary: false }));
+      setAiSuggestionLoading(false);
     }
   };
 
-  const handleImproveContent = async (type, id, text) => {
-    if (!apiKeyValid) {
-      alert("Please enter and validate your Gemini API Key first!");
-      return;
-    }
-    const key = `${type}-${id}`;
-    setAiLoading(prev => ({ ...prev, improve: { ...prev.improve, [key]: true } }));
+  const handleImproveContent = async () => {
+    if (!improveInput.trim()) return;
+    setAiSuggestionLoading(true);
     try {
-      const improved = await improveContent(text, userKey);
-      if (type === 'experience') {
-        updateExperience(id, 'description', improved);
-      } else if (type === 'project') {
-        updateProject(id, 'description', improved);
-      }
+      const improved = await improveContent(improveInput, apiKey || undefined);
+      setImprovedText(improved);
     } catch (error) {
-      console.error(error);
-      alert("Failed to improve content. Please check your API key and try again.");
+      alert('Error improving content: ' + error.message);
     } finally {
-      setAiLoading(prev => ({ ...prev, improve: { ...prev.improve, [key]: false } }));
-    }
-  };
-
-  const handleSuggestSkills = async (skill) => {
-    if (!apiKeyValid) {
-      alert("Please enter and validate your Gemini API Key first!");
-      return;
-    }
-    setAiLoading(prev => ({ ...prev, skills: true }));
-    try {
-      const education = formData.education[0];
-      const suggestions = await suggestSkills(skill, education, userKey);
-      setSkillSuggestions(suggestions);
-    } catch (error) {
-      alert(error.message);
-    } finally {
-      setAiLoading(prev => ({ ...prev, skills: false }));
-    }
-  };
-
-  const handleSuggestBullets = async (type, id, role, company) => {
-    if (!apiKeyValid) {
-      alert("Please enter and validate your Gemini API Key first!");
-      return;
-    }
-    const key = `${type}-${id}`;
-    setAiLoading(prev => ({ ...prev, bullets: { ...prev.bullets, [key]: true } }));
-    try {
-      const education = formData.education[0];
-      const suggestions = await suggestBulletPoints(role, company, education, userKey);
-      setBulletSuggestions(prev => ({ ...prev, [key]: suggestions }));
-    } catch (error) {
-      console.error('Error getting bullet suggestions:', error);
-      alert("Failed to suggest bullet points. Please check your API key and try again.");
-    } finally {
-      setAiLoading(prev => ({ ...prev, bullets: { ...prev.bullets, [key]: false } }));
+      setAiSuggestionLoading(false);
     }
   };
 
   const addSuggestedSkill = (skill) => {
-    if (!formData.techSkills.languages.includes(skill)) {
-      setFormData(prev => ({
-        ...prev,
-        techSkills: {
-          ...prev.techSkills,
-          languages: [...prev.techSkills.languages, skill]
-        }
-      }));
-    }
-    setSkillSuggestions([]);
+    const newLanguages = [...formData.techSkills.languages, skill];
+    setFormData({ ...formData, techSkills: { ...formData.techSkills, languages: newLanguages } });
   };
+
+  const addSuggestedBullet = (bullet) => {
+    const newExp = { id: Date.now(), company: companyInput, position: roleInput, years: "2024 - Present", description: bullet };
+    setFormData({ ...formData, experience: [...formData.experience, newExp] });
+  };
+
+
 
   // Template Components
   const CreativeGreenTemplate = ({ formData, accentColor, leftPanelColor, rightPanelColor, selectedFont }) => (
@@ -3539,16 +3528,7 @@ const App = () => {
                   <p>Click "Download PDF" to generate and download your resume as a high-quality PDF file.</p>
                 </section>
 
-                <section>
-                  <h3 className="text-lg font-semibold mb-2">🤖 AI Features</h3>
-                  <p className="mb-2">Enter your Gemini API key to unlock AI-powered features:</p>
-                  <ul className="list-disc list-inside ml-4 space-y-1">
-                    <li>Generate professional summaries</li>
-                    <li>Improve existing content</li>
-                    <li>Suggest skills based on your background</li>
-                    <li>Get bullet point suggestions for experience</li>
-                  </ul>
-                </section>
+
 
                 <section>
                   <h3 className="text-lg font-semibold mb-2">💡 Tips</h3>
@@ -4211,6 +4191,8 @@ const App = () => {
             </label>
           </div>
 
+
+
           {/* Download PDF */}
           <div>
             <button
@@ -4224,123 +4206,75 @@ const App = () => {
       </div>
 
       {/* Main Content */}
-      <main className="flex-1 h-full bg-zinc-200 overflow-y-auto flex justify-center">
+      <main className="flex-1 h-full bg-zinc-200 overflow-y-auto">
         {currentView === 'gallery' ? (
           <div className="p-12 w-full max-w-6xl">
-            {/* Name and Title Inputs */}
-            <div className="mb-8 p-6 rounded-lg shadow-md bg-white text-black">
-              <h3 className="text-lg font-semibold mb-4 text-gray-800">Enter Your Details for Preview</h3>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">Enter you name</label>
-                  <input
-                    type="text"
-                    value={previewName}
-                    onChange={(e) => setPreviewName(e.target.value)}
-                    className="w-full p-3 border border-gray-300 bg-white text-black rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2 text-gray-700">Enter your job title</label>
-                  <input
-                    type="text"
-                    value={formData.title}
-                    onChange={(e) => handleInputChange({ target: { name: 'title', value: e.target.value } })}
-                    className="w-full p-3 border border-gray-300 bg-white text-black rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Template Gallery */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
               <div onClick={() => { setSelectedTemplate('modern'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-gray-100 flex flex-col items-center justify-center p-6">
-                  <div className="w-20 h-20 rounded-full bg-gray-300 flex items-center justify-center mb-4">
-                    <span className="text-gray-600 text-2xl">👤</span>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="font-bold text-gray-800 mb-1">{previewName}</h3>
-                    <p className="text-sm text-gray-600">{formData.title || 'Job Title'}</p>
+                <div className="w-full h-48 flex">
+                  <div className="w-1/3 bg-[#E8DCC4]"></div>
+                  <div className="w-2/3 bg-white p-4">
+                    <div className="h-2 w-12 bg-[#2D3E50] mb-2"></div>
+                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
+                    <div className="h-3 w-16 bg-zinc-100"></div>
                   </div>
                 </div>
-                <div className="p-4 font-bold text-center bg-slate-700 text-white">Modern Slate</div>
+                <div className="p-4 font-bold text-center bg-[#2D3E50] text-white">Modern</div>
               </div>
               <div onClick={() => { setSelectedTemplate('creative'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-emerald-50 flex flex-col items-center justify-center p-6">
-                  <div className="w-20 h-20 overflow-hidden mb-4" style={{ clipPath: 'polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%)', backgroundColor: '#10b981' }}>
-                    <div className="w-full h-full bg-emerald-100 flex items-center justify-center">
-                      <span className="text-emerald-600 text-3xl">🌿</span>
-                    </div>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="font-bold text-emerald-800 mb-1">{previewName}</h3>
-                    <p className="text-sm text-emerald-600">{formData.title || 'Job Title'}</p>
+                <div className="w-full h-48 flex">
+                  <div className="w-1/3 bg-[#E8DCC4]"></div>
+                  <div className="w-2/3 bg-white p-4">
+                    <div className="h-2 w-12 bg-emerald-700 mb-2"></div>
+                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
+                    <div className="h-3 w-16 bg-zinc-100"></div>
                   </div>
                 </div>
                 <div className="p-4 font-bold text-center bg-emerald-700 text-white">Creative Green</div>
               </div>
               <div onClick={() => { setSelectedTemplate('geometric'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-blue-50 flex flex-col items-center justify-center p-6">
-                  <div className="w-20 h-20 rounded-lg border-4 border-blue-400 bg-blue-900 flex items-center justify-center mb-4">
-                    <span className="text-white text-xl">✨</span>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="font-bold text-blue-900 mb-1">{previewName}</h3>
-                    <p className="text-sm text-blue-600">{formData.title || 'Job Title'}</p>
-                  </div>
-                </div>
-                <div className="p-4 font-bold text-center bg-blue-900 text-white">Blue Geometric</div>
-              </div>
-              <div onClick={() => { setSelectedTemplate('accountant'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-gray-50 flex flex-col items-center justify-center p-6">
-                  <div className="w-20 h-20 bg-gray-800 flex items-center justify-center mb-4">
-                    <span className="text-white text-3xl">💼</span>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="font-bold text-gray-900 mb-1">{previewName}</h3>
-                    <p className="text-sm text-gray-600">{formData.title || 'Job Title'}</p>
+                <div className="w-full h-48 flex">
+                  <div className="w-1/3 bg-blue-600"></div>
+                  <div className="w-2/3 bg-white p-4">
+                    <div className="h-2 w-12 bg-blue-600 mb-2"></div>
+                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
+                    <div className="h-3 w-16 bg-zinc-100"></div>
                   </div>
                 </div>
-                <div className="p-4 font-bold text-center bg-gray-900 text-white">Minimalist Accountant</div>
+                <div className="p-4 font-bold text-center bg-blue-600 text-white">Blue Geometric</div>
               </div>
               <div onClick={() => { setSelectedTemplate('retro'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-[#FFFBF2] flex flex-col items-center justify-center p-6 relative">
-                  <div className="absolute top-2 left-2 w-8 h-8 bg-[#FFB693] rounded-full opacity-60" />
-                  <div className="absolute bottom-2 right-2 w-6 h-6 bg-[#B5EAD7] rounded-lg rotate-12 opacity-40" />
-                  <div className="w-20 h-20 rounded-[20px] bg-white border-4 border-[#FFB693] flex items-center justify-center mb-4 shadow-sm">
-                    <span className="text-[#FFB693] text-2xl">🎨</span>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="font-bold text-[#333] mb-1">{previewName}</h3>
-                    <p className="text-sm text-[#FFB693]">{formData.title || 'Job Title'}</p>
+                <div className="w-full h-48 flex">
+                  <div className="w-1/3 bg-[#E8A87C]"></div>
+                  <div className="w-2/3 bg-[#FFFBF2] p-4">
+                    <div className="h-2 w-12 bg-[#E8A87C] mb-2"></div>
+                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
+                    <div className="h-3 w-16 bg-zinc-100"></div>
                   </div>
                 </div>
-                <div className="p-4 font-bold text-center bg-[#FFB693] text-white">Playful Retro</div>
+                <div className="p-4 font-bold text-center bg-[#E8A87C] text-white">Playful Retro</div>
+              </div>
+              <div onClick={() => { setSelectedTemplate('accountant'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
+                <div className="w-full h-48 bg-[#fcfcfc] p-4">
+                  <div className="h-2 w-12 bg-[#303030] mb-2"></div>
+                  <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
+                  <div className="h-3 w-16 bg-zinc-100"></div>
+                </div>
+                <div className="p-4 font-bold text-center bg-[#303030] text-white">Minimalist Accountant</div>
               </div>
               <div onClick={() => { setSelectedTemplate('playful'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-[#F8F9FA] flex flex-col items-center justify-center p-6">
-                  <div className="w-20 h-20 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center mb-4 shadow-lg">
-                    <span className="text-white text-2xl">🎨</span>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="font-bold text-gray-800 mb-1">{previewName}</h3>
-                    <p className="text-sm text-gray-600">{formData.title || 'Job Title'}</p>
-                  </div>
+                <div className="w-full h-48 bg-[#E5E7EB] p-4">
+                  <div className="h-2 w-12 bg-[#2D3E50] mb-2"></div>
+                  <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
+                  <div className="h-3 w-16 bg-zinc-100"></div>
                 </div>
-                <div className="p-4 font-bold text-center bg-gradient-to-r from-blue-500 to-purple-500 text-white">Modern Playful</div>
+                <div className="p-4 font-bold text-center bg-[#2D3E50] text-white">Modern Playful</div>
               </div>
               <div onClick={() => { setSelectedTemplate('new-retro'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-[#FFFBF2] flex flex-col items-center justify-center p-6 relative">
-                  <div className="absolute top-2 left-2 w-6 h-6 bg-[#E8A87C] rounded-full opacity-80" />
-                  <div className="absolute bottom-2 right-2 w-4 h-4 bg-[#C3E2D3] rounded-lg rotate-12 opacity-60" />
-                  <div className="w-20 h-20 rounded-[20px] bg-white border-4 border-[#E8A87C] flex items-center justify-center mb-4 shadow-sm">
-                    <span className="text-[#E8A87C] text-2xl">✨</span>
-                  </div>
-                  <div className="text-center">
-                    <h3 className="font-bold text-[#2D2D2D] mb-1">{previewName}</h3>
-                    <p className="text-sm text-[#E8A87C]">{formData.title || 'Job Title'}</p>
-                  </div>
+                <div className="w-full h-48 bg-[#FFFBF2] p-4">
+                  <div className="h-2 w-12 bg-[#E8A87C] mb-2"></div>
+                  <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
+                  <div className="h-3 w-16 bg-zinc-100"></div>
                 </div>
                 <div className="p-4 font-bold text-center bg-[#E8A87C] text-white">New Playful Retro</div>
               </div>
@@ -4355,32 +4289,295 @@ const App = () => {
                 </div>
                 <div className="p-4 font-bold text-center bg-black text-white">Professional Contrast</div>
               </div>
-
             </div>
           </div>
         ) : (
-          <div className="relative w-full h-full flex items-center justify-center">
-            <div
-              ref={resumeRef}
-              className="w-[210mm] h-[297mm] shadow-2xl flex-shrink-0 bg-white overflow-hidden transition-all duration-300 origin-top"
-              style={{
-                fontFamily: selectedFont
-              }}
-            >
-              {selectedTemplate === 'modern' && <ModernTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} />}
-              {selectedTemplate === 'creative' && <CreativeGreenTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} />}
-              {selectedTemplate === 'geometric' && <BlueGeometricTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-              {selectedTemplate === 'retro' && <PlayfulRetroTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-              {selectedTemplate === 'accountant' && <MinimalistAccountantTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-              {selectedTemplate === 'playful' && <ModernPlayfulTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-              {selectedTemplate === 'new-retro' && <NewPlayfulRetroTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-              {selectedTemplate === 'professional-black' && <ProfessionalBlackTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
+          <div className="relative w-full h-full flex">
+            {/* Resume Preview - Left Side */}
+            <div className="flex-1 flex items-center justify-center">
+              <div
+                ref={resumeRef}
+                className="w-[210mm] h-[297mm] shadow-2xl flex-shrink-0 bg-white overflow-hidden transition-all duration-300 origin-top"
+                style={{
+                  fontFamily: selectedFont
+                }}
+              >
+                {selectedTemplate === 'modern' && <ModernTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} />}
+                {selectedTemplate === 'creative' && <CreativeGreenTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} />}
+                {selectedTemplate === 'geometric' && <BlueGeometricTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
+                {selectedTemplate === 'retro' && <PlayfulRetroTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
+                {selectedTemplate === 'accountant' && <MinimalistAccountantTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
+                {selectedTemplate === 'playful' && <ModernPlayfulTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
+                {selectedTemplate === 'new-retro' && <NewPlayfulRetroTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
+        {selectedTemplate === 'professional-black' && <ProfessionalBlackTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
+
+      </div>
+
+
+
+      {/* ZOOM CONTROLS */}
+
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-white/10 backdrop-blur-md p-1.5 rounded-full border border-white/20 shadow-xl">
+                <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full">-</button>
+                <span className="text-[10px] text-black font-mono w-8 text-center">{Math.round(zoom * 100)}%</span>
+                <button onClick={() => setZoom(z => Math.min(1.5, z + 0.1))} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full">+</button>
+              </div>
             </div>
-            {/* ZOOM CONTROLS */}
-            <div className="absolute bottom-6 right-0 z-50 flex items-center gap-2 bg-white/10 backdrop-blur-md p-1.5 rounded-full border border-white/20 shadow-xl">
-              <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full">-</button>
-              <span className="text-[10px] text-black font-mono w-8 text-center">{Math.round(zoom * 100)}%</span>
-              <button onClick={() => setZoom(z => Math.min(1.5, z + 0.1))} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full">+</button>
+
+            {/* AI Suggestions Panel - Right Side */}
+            <div className="w-80 overflow-y-auto h-full bg-gray-50 text-black p-4">
+              <div className="space-y-6">
+                {/* Header */}
+                <div className="text-center mb-6">
+                  <div className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
+                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
+                    </svg>
+                    AI Assistant
+                  </div>
+                  <p className="text-xs mt-2 text-gray-600">Created By KRISH PATEL</p>
+                </div>
+
+                {/* API Key Section */}
+                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/>
+                    </svg>
+                    <h4 className="text-sm font-semibold text-gray-800">API Key</h4>
+                  </div>
+                  <label className="block text-xs font-medium mb-2 text-gray-600">Enter your key here.....</label>
+                  <input
+                    type="password"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Enter API key or leave empty to use .env"
+                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-purple-300 transition-colors"
+                  />
+                </div>
+
+                {/* Resume Summary Section */}
+                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/>
+                    </svg>
+                    <h4 className="text-sm font-semibold text-gray-800">Resume Summary</h4>
+                  </div>
+                  <button
+                    onClick={handleGenerateSummary}
+                    disabled={aiSuggestionLoading}
+                    className="w-full p-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    {aiSuggestionLoading ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd"/>
+                        </svg>
+                        Generate Resume Summary
+                      </>
+                    )}
+                  </button>
+                  {summaryText && (
+                    <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
+                      <p className="text-xs font-semibold text-green-800 mb-2">Generated Summary:</p>
+                      <p className="text-xs text-gray-700 mb-3">{summaryText}</p>
+                      <button
+                        onClick={() => setFormData({ ...formData, about: summaryText })}
+                        className="w-full px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-semibold transition-colors"
+                      >
+                        Use This Summary
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Skills Section */}
+                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"/>
+                    </svg>
+                    <h4 className="text-sm font-semibold text-gray-800">Skills</h4>
+                  </div>
+                  <input
+                    type="text"
+                    value={skillInput}
+                    onChange={(e) => setSkillInput(e.target.value)}
+                    placeholder="Enter a skill (e.g., React)"
+                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-blue-300 transition-colors mb-3"
+                  />
+                  <div className="text-xs text-gray-500 mb-3">
+                    <span className="font-medium">Examples:</span> React, Python, UI/UX, Data Analysis
+                  </div>
+                  <button
+                    onClick={handleSuggestSkills}
+                    disabled={aiSuggestionLoading || !skillInput.trim()}
+                    className="w-full p-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    {aiSuggestionLoading ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                        Suggesting...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd"/>
+                        </svg>
+                        Suggest Related Skills
+                      </>
+                    )}
+                  </button>
+                  {suggestedSkills.length > 0 && (
+                    <div className="mt-3 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border border-blue-200">
+                      <p className="text-xs font-semibold text-blue-800 mb-2">Suggested Skills:</p>
+                      <div className="space-y-2">
+                        {suggestedSkills.map((skill, index) => (
+                          <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
+                            <span className="text-xs text-gray-700">{skill}</span>
+                            <button
+                              onClick={() => addSuggestedSkill(skill)}
+                              className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-semibold transition-colors"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bullet Points Section */}
+                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-indigo-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" clipRule="evenodd"/>
+                    </svg>
+                    <h4 className="text-sm font-semibold text-gray-800">Bullet Points</h4>
+                  </div>
+                  <input
+                    type="text"
+                    value={roleInput}
+                    onChange={(e) => setRoleInput(e.target.value)}
+                    placeholder="Job Role (e.g., Software Engineer)"
+                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-indigo-300 transition-colors mb-2"
+                  />
+                  <input
+                    type="text"
+                    value={companyInput}
+                    onChange={(e) => setCompanyInput(e.target.value)}
+                    placeholder="Company Name"
+                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-indigo-300 transition-colors mb-3"
+                  />
+                  <div className="text-xs text-gray-500 mb-3">
+                    <span className="font-medium">Examples:</span> Frontend Developer, Google, Microsoft
+                  </div>
+                  <button
+                    onClick={handleSuggestBullets}
+                    disabled={aiSuggestionLoading || !roleInput.trim() || !companyInput.trim()}
+                    className="w-full p-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    {aiSuggestionLoading ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                        Generating...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd"/>
+                        </svg>
+                        Suggest Bullet Points
+                      </>
+                    )}
+                  </button>
+                  {suggestedBullets.length > 0 && (
+                    <div className="mt-3 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
+                      <p className="text-xs font-semibold text-indigo-800 mb-2">Suggested Bullet Points:</p>
+                      <div className="space-y-2">
+                        {suggestedBullets.map((bullet, index) => (
+                          <div key={index} className="flex items-start gap-2 p-2 bg-white rounded border">
+                            <span className="text-xs text-gray-700 flex-1 leading-relaxed">{bullet}</span>
+                            <button
+                              onClick={() => addSuggestedBullet(bullet)}
+                              className="px-2 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs font-semibold transition-colors flex-shrink-0"
+                            >
+                              Add
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content Improvement Section */}
+                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                    </svg>
+                    <h4 className="text-sm font-semibold text-gray-800">Content Improvement</h4>
+                  </div>
+                  <textarea
+                    value={improveInput}
+                    onChange={(e) => setImproveInput(e.target.value)}
+                    placeholder="Paste existing bullet point to improve"
+                    rows="3"
+                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-orange-300 transition-colors mb-3 resize-none"
+                  />
+                  <button
+                    onClick={handleImproveContent}
+                    disabled={aiSuggestionLoading || !improveInput.trim()}
+                    className="w-full p-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    {aiSuggestionLoading ? (
+                      <>
+                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+                        </svg>
+                        Improving...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
+                        </svg>
+                        Improve Content
+                      </>
+                    )}
+                  </button>
+                  {improvedText && (
+                    <div className="mt-3 p-3 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg border border-orange-200">
+                      <p className="text-xs font-semibold text-orange-800 mb-2">Improved Version:</p>
+                      <p className="text-xs text-gray-700 mb-3">{improvedText}</p>
+                      <button
+                        onClick={() => setImproveInput(improvedText)}
+                        className="w-full px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded text-xs font-semibold transition-colors"
+                      >
+                        Use This
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
         )}

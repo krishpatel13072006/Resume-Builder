@@ -1,9 +1,1 @@
-# TODO: Resume Builder Tasks
-
-## Tasks
-----
-- [ ] Add more resume templates
-- [ ] Improve PDF export quality
-- [ ] Add form validation
-- [ ] Add local storage for form data
-- [ ] Add print functionality
+- [ ] Change layout to add AI suggestion box to the right of resume for easy access from top
