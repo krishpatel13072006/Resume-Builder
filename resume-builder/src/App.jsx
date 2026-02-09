@@ -1,12 +1,23 @@
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Phone, Mail, MapPin, Trash2, Globe, Github, Linkedin, Moon, Sun } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
+
+import React, { useState, useRef, useEffect, Suspense } from 'react';
+import { Phone, Mail, MapPin, Trash2, Globe, Github, Linkedin, Moon, Sun, FileText, ArrowRight, Sparkle, Wand2, ListChecks, Quote, PenLine, KeyRound } from 'lucide-react';
 import LoadingSpinner from './components/LoadingSpinner';
 import { suggestSkills, suggestBulletPoints, generateSummary, improveContent } from './api/genai';
+import { LandingPage, HeroVisual } from './LandingPage';
 
+// Dynamic library loader
+const loadLib = (url) => {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = url;
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+};
 
+  
 
 const getLightColor = (hex, opacity = 0.2) => {
   // Simple hex to rgba converter for consistent transparency
@@ -22,10 +33,10 @@ const App = () => {
   const [leftPanelColor, setLeftPanelColor] = useState('#E8DCC4');
   const [rightPanelColor, setRightPanelColor] = useState('#FFFFFF');
   const [selectedTemplate, setSelectedTemplate] = useState(null);
-  const [currentView, setCurrentView] = useState('gallery');
+  const [currentView, setCurrentView] = useState('landing');
   const [selectedFont, setSelectedFont] = useState('Roboto');
 
-  const [zoom, setZoom] = useState(0.9);
+
 
   const [showGuidance, setShowGuidance] = useState(false);
 
@@ -207,33 +218,38 @@ const App = () => {
   };
 
   const downloadPDF = async () => {
-    const element = resumeRef.current;
-
-    // Temporarily expand elements for full capture
-    const rightPanel = element?.querySelector('#right-panel');
-    const resumeContainer = element?.parentElement;
-    const originalOverflow = rightPanel?.style.overflow;
-    const originalMaxHeight = rightPanel?.style.maxHeight;
-    const originalHeight = resumeContainer?.style.height;
-    const originalInnerHeight = element?.style.height;
-
-    if (rightPanel) {
-      rightPanel.style.overflow = 'visible';
-      rightPanel.style.maxHeight = 'none';
-    }
-    if (resumeContainer) {
-      resumeContainer.style.height = 'auto';
-    }
-    if (element) {
-      element.style.height = 'auto';
-    }
-
     try {
+      // Load libraries dynamically from CDN
+      await loadLib('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js');
+      await loadLib('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js');
+
+      const element = resumeRef.current;
+
+      // Temporarily expand elements for full capture
+      const rightPanel = element?.querySelector('#right-panel');
+      const resumeContainer = element?.parentElement;
+      const originalOverflow = rightPanel?.style.overflow;
+      const originalMaxHeight = rightPanel?.style.maxHeight;
+      const originalHeight = resumeContainer?.style.height;
+      const originalInnerHeight = element?.style.height;
+
+      if (rightPanel) {
+        rightPanel.style.overflow = 'visible';
+        rightPanel.style.maxHeight = 'none';
+      }
+      if (resumeContainer) {
+        resumeContainer.style.height = 'auto';
+      }
+      if (element) {
+        element.style.height = 'auto';
+      }
+
       // Wait for layout to update
       await new Promise(resolve => setTimeout(resolve, 200));
 
-      const canvas = await html2canvas(element, {
-        scale: 2,
+      const canvas = await window.html2canvas(element, {
+        // Use scale 1 to avoid tiny height overflow that can create an extra blank page
+        scale: 1,
         useCORS: true,
         allowTaint: true,
         imageTimeout: 0,
@@ -248,7 +264,7 @@ const App = () => {
       });
 
       const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdf = new jspdfLib.jsPDF('p', 'mm', 'a4');
       const pageWidth = 210;
       const pageHeight = 297;
       const margin = 0;
@@ -257,20 +273,27 @@ const App = () => {
       const imgWidth = pageWidth - (2 * margin);
       const imgHeight = (canvas.height * imgWidth) / canvas.width;
 
-      // Calculate number of pages needed
-      const totalPages = Math.ceil(imgHeight / pageHeight);
+      // If the content is approximately one page or smaller, force it into a single page
+      // by uniformly scaling to fit the A4 height. This prevents a trailing blank page
+      // caused by tiny overflow beyond the page height.
+      const onePageTolerance = 6; // mm
+      if (imgHeight <= pageHeight + onePageTolerance) {
+        const scaledHeight = pageHeight;
+        const scaledWidth = (canvas.width * scaledHeight) / canvas.height;
+        const xOffset = (pageWidth - scaledWidth) / 2; // center horizontally
+        pdf.addImage(imgData, 'PNG', xOffset, 0, scaledWidth, scaledHeight, '', 'FAST');
+      } else {
+        // Multi-page fallback for genuinely long resumes
+        const totalPages = Math.ceil(imgHeight / pageHeight);
 
-      // Add image to each page with proper offset
-      for (let i = 0; i < totalPages; i++) {
-        if (i > 0) {
-          pdf.addPage();
+        for (let i = 0; i < totalPages; i++) {
+          if (i > 0) {
+            pdf.addPage();
+          }
+
+          const yPosition = -(i * pageHeight) + margin;
+          pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, imgHeight, '', 'FAST');
         }
-
-        // Calculate Y position offset for this page
-        const yPosition = -(i * pageHeight) + margin;
-
-        // Add the portion of the image for this page
-        pdf.addImage(imgData, 'PNG', margin, yPosition, imgWidth, imgHeight, '', 'FAST');
       }
 
       pdf.save(`${formData.name}_Resume.pdf`);
@@ -279,15 +302,19 @@ const App = () => {
       alert('Error generating PDF. Please try again.');
     } finally {
       // Restore original styles
+      const element = resumeRef.current;
+      const rightPanel = element?.querySelector('#right-panel');
+      const resumeContainer = element?.parentElement;
+
       if (rightPanel) {
-        rightPanel.style.overflow = originalOverflow || '';
-        rightPanel.style.maxHeight = originalMaxHeight || '';
+        rightPanel.style.overflow = rightPanel.dataset.originalOverflow || '';
+        rightPanel.style.maxHeight = rightPanel.dataset.originalMaxHeight || '';
       }
       if (resumeContainer) {
-        resumeContainer.style.height = originalHeight || '';
+        resumeContainer.style.height = resumeContainer.dataset.originalHeight || '';
       }
       if (element) {
-        element.style.height = originalInnerHeight || '';
+        element.style.height = element.dataset.originalInnerHeight || '';
       }
     }
   };
@@ -1672,13 +1699,37 @@ const App = () => {
               {formData.projects.map(proj => (
                 <div key={proj.id}>
                   <div className="flex justify-between items-baseline mb-1">
-                    <h4 className="text-sm font-black uppercase">{proj.title}</h4>
-                    <span className="text-[10px] font-bold text-[#aaaaaa]">{proj.years}</span>
+                    <h4
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('project', e.currentTarget.textContent, proj.id, 'title')}
+                      className="text-sm font-black uppercase outline-none hover:bg-white/10 p-1"
+                    >
+                      {proj.title}
+                    </h4>
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('project', e.currentTarget.textContent, proj.id, 'years')}
+                      className="text-[10px] font-bold text-[#aaaaaa] outline-none hover:bg-white/10 p-1"
+                    >
+                      {proj.years}
+                    </span>
                   </div>
-                  <p className="text-[11px] font-bold text-[#747474] mb-2 uppercase tracking-wide">
+                  <p
+                    contentEditable={true}
+                    suppressContentEditableWarning={true}
+                    onBlur={(e) => handleBlur('project', e.currentTarget.textContent, proj.id, 'tech')}
+                    className="text-[11px] font-bold text-[#747474] mb-2 uppercase tracking-wide outline-none hover:bg-white/10 p-1"
+                  >
                     {proj.tech}
                   </p>
-                  <p className="text-[11px] leading-relaxed text-[#303030] max-w-2xl">
+                  <p
+                    contentEditable={true}
+                    suppressContentEditableWarning={true}
+                    onBlur={(e) => handleBlur('project', e.currentTarget.textContent, proj.id, 'description')}
+                    className="text-[11px] leading-relaxed text-[#303030] max-w-2xl outline-none hover:bg-white/10 p-1"
+                  >
                     {proj.description}
                   </p>
                 </div>
@@ -1865,7 +1916,14 @@ const App = () => {
           </div>
           <section>
             <h3 className="text-sm font-bold border-b pb-2 mb-4 uppercase" style={{ borderColor: mediumAccent }}>Profile</h3>
-            <p className="text-[10px] text-white leading-relaxed opacity-90">{formData.about}</p>
+            <p
+              contentEditable={true}
+              suppressContentEditableWarning={true}
+              onBlur={(e) => handleBlur('about', e.currentTarget.textContent)}
+              className="text-[10px] text-white leading-relaxed opacity-90 outline-none hover:bg-white/10 p-1"
+            >
+              {formData.about}
+            </p>
           </section>
           <section>
             <h3 className="text-sm font-bold border-b pb-2 mb-4 uppercase" style={{ borderColor: mediumAccent }}>Contact</h3>
@@ -1881,13 +1939,40 @@ const App = () => {
               <h3 className="text-sm font-bold border-b pb-2 mb-4 uppercase" style={{ borderColor: mediumAccent }}>Links</h3>
               <div className="space-y-2 text-[10px]">
                 {formData.links?.portfolio && (
-                  <p>🌐 {formData.links.portfolio}</p>
+                  <p>🌐
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('links', e.currentTarget.textContent, null, 'portfolio')}
+                      className="outline-none hover:bg-white/10 p-1"
+                    >
+                      {formData.links.portfolio}
+                    </span>
+                  </p>
                 )}
                 {formData.links?.github && (
-                  <p>🐙 {formData.links.github}</p>
+                  <p>🐙
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('links', e.currentTarget.textContent, null, 'github')}
+                      className="outline-none hover:bg-white/10 p-1"
+                    >
+                      {formData.links.github}
+                    </span>
+                  </p>
                 )}
                 {formData.links?.linkedin && (
-                  <p>💼 {formData.links.linkedin}</p>
+                  <p>💼
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('links', e.currentTarget.textContent, null, 'linkedin')}
+                      className="outline-none hover:bg-white/10 p-1"
+                    >
+                      {formData.links.linkedin}
+                    </span>
+                  </p>
                 )}
               </div>
             </section>
@@ -1908,8 +1993,17 @@ const App = () => {
             <section>
               <h3 className="text-sm font-bold border-b pb-2 mb-4 uppercase" style={{ borderColor: mediumAccent }}>Expertise</h3>
               <div className="space-y-1 text-[10px]">
-                {formData.expertise.map(exp => (
-                  <div key={exp}>• {exp}</div>
+                {formData.expertise.map((exp, index) => (
+                  <div key={exp}>•
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('expertise', e.currentTarget.textContent, index)}
+                      className="outline-none hover:bg-white/10 p-1"
+                    >
+                      {exp}
+                    </span>
+                  </div>
                 ))}
               </div>
             </section>
@@ -2285,9 +2379,41 @@ const App = () => {
               <h2 className="text-sm font-black uppercase tracking-widest mb-4" style={{ color: accentColor }}>Experience</h2>
               {formData.experience.map(exp => (
                 <div key={exp.id} className="mb-6 relative pl-4" style={{ borderLeftColor: accentColor, borderLeftWidth: '2px' }}>
-                  <p className="text-xs font-black uppercase">{exp.position}</p>
-                  <p className="text-[10px] font-bold text-zinc-500">{exp.company} • {exp.years}</p>
-                  <p className="text-[10px] leading-relaxed mt-1">{exp.description}</p>
+                  <p
+                    contentEditable={true}
+                    suppressContentEditableWarning={true}
+                    onBlur={(e) => handleBlur('experience', e.currentTarget.textContent, exp.id, 'position')}
+                    className="text-xs font-black uppercase outline-none hover:bg-white/10 p-1"
+                  >
+                    {exp.position}
+                  </p>
+                  <p className="text-[10px] font-bold text-zinc-500">
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('experience', e.currentTarget.textContent, exp.id, 'company')}
+                      className="outline-none hover:bg-white/10 p-1"
+                    >
+                      {exp.company}
+                    </span>
+                    {' • '}
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('experience', e.currentTarget.textContent, exp.id, 'years')}
+                      className="outline-none hover:bg-white/10 p-1"
+                    >
+                      {exp.years}
+                    </span>
+                  </p>
+                  <p
+                    contentEditable={true}
+                    suppressContentEditableWarning={true}
+                    onBlur={(e) => handleBlur('experience', e.currentTarget.textContent, exp.id, 'description')}
+                    className="text-[10px] leading-relaxed mt-1 outline-none hover:bg-white/10 p-1"
+                  >
+                    {exp.description}
+                  </p>
                 </div>
               ))}
             </section>
@@ -2411,7 +2537,14 @@ const App = () => {
           <div className="col-span-7 space-y-6">
             <section>
               <h2 className="text-sm font-black uppercase tracking-widest mb-2" style={{ color: accentColor }}>About Me</h2>
-              <p className="text-xs leading-relaxed text-justify">{formData.about}</p>
+              <p
+                contentEditable={true}
+                suppressContentEditableWarning={true}
+                onBlur={(e) => handleBlur('about', e.currentTarget.textContent)}
+                className="text-xs leading-relaxed text-justify outline-none hover:bg-white/10 p-1"
+              >
+                {formData.about}
+              </p>
             </section>
 
             <section>
@@ -2458,9 +2591,42 @@ const App = () => {
               <section>
                 <h2 className="text-sm font-black uppercase tracking-widest mb-4" style={{ color: accentColor }}>Professional Links</h2>
                 <div className="space-y-2 text-[10px] font-bold">
-                  {formData.links?.portfolio && <p className="flex items-center gap-2">🌐 {formData.links.portfolio}</p>}
-                  {formData.links?.github && <p className="flex items-center gap-2">🐙 {formData.links.github}</p>}
-                  {formData.links?.linkedin && <p className="flex items-center gap-2">💼 {formData.links.linkedin}</p>}
+                  {formData.links?.portfolio && (
+                    <p className="flex items-center gap-2">🌐
+                      <span
+                        contentEditable={true}
+                        suppressContentEditableWarning={true}
+                        onBlur={(e) => handleBlur('links', e.currentTarget.textContent, null, 'portfolio')}
+                        className="outline-none hover:bg-white/10 p-1"
+                      >
+                        {formData.links.portfolio}
+                      </span>
+                    </p>
+                  )}
+                  {formData.links?.github && (
+                    <p className="flex items-center gap-2">🐙
+                      <span
+                        contentEditable={true}
+                        suppressContentEditableWarning={true}
+                        onBlur={(e) => handleBlur('links', e.currentTarget.textContent, null, 'github')}
+                        className="outline-none hover:bg-white/10 p-1"
+                      >
+                        {formData.links.github}
+                      </span>
+                    </p>
+                  )}
+                  {formData.links?.linkedin && (
+                    <p className="flex items-center gap-2">💼
+                      <span
+                        contentEditable={true}
+                        suppressContentEditableWarning={true}
+                        onBlur={(e) => handleBlur('links', e.currentTarget.textContent, null, 'linkedin')}
+                        className="outline-none hover:bg-white/10 p-1"
+                      >
+                        {formData.links.linkedin}
+                      </span>
+                    </p>
+                  )}
                 </div>
               </section>
             )}
@@ -2604,10 +2770,21 @@ const App = () => {
               </span>
             </div>
 
-            <h1 className="text-5xl font-black uppercase tracking-tight leading-none text-[#2D2D2D]">
+            <h1
+              contentEditable={true}
+              suppressContentEditableWarning={true}
+              onBlur={(e) => handleBlur('name', e.currentTarget.textContent)}
+              className="text-5xl font-black uppercase tracking-tight leading-none text-[#2D2D2D] outline-none hover:bg-white/10 p-1"
+            >
               {formData.name || "RACHELLE BEAUDRY"}
             </h1>
-            <p className="text-xl font-bold mt-2 italic tracking-wide" style={{ color: theme.primary }}>
+            <p
+              contentEditable={true}
+              suppressContentEditableWarning={true}
+              onBlur={(e) => handleBlur('title', e.currentTarget.textContent)}
+              className="text-xl font-bold mt-2 italic tracking-wide outline-none hover:bg-white/10 p-1"
+              style={{ color: theme.primary }}
+            >
               {formData.title || "Web Designer"}
             </p>
           </div>
@@ -2629,9 +2806,39 @@ const App = () => {
                     {/* Dot on timeline */}
                     <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full" style={{ backgroundColor: theme.primary }} />
 
-                    <p className="text-xs font-black uppercase text-[#333]">{exp.position}</p>
-                    <p className="text-[10px] font-bold text-zinc-500 mb-1">{exp.company} | {exp.years}</p>
-                    <p className="text-[10px] leading-relaxed text-zinc-600">
+                    <p
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('experience', e.currentTarget.textContent, exp.id, 'position')}
+                      className="text-xs font-black uppercase text-[#333] outline-none hover:bg-white/10 p-1"
+                    >
+                      {exp.position}
+                    </p>
+                    <p className="text-[10px] font-bold text-zinc-500 mb-1">
+                      <span
+                        contentEditable={true}
+                        suppressContentEditableWarning={true}
+                        onBlur={(e) => handleBlur('experience', e.currentTarget.textContent, exp.id, 'company')}
+                        className="outline-none hover:bg-white/10 p-1"
+                      >
+                        {exp.company}
+                      </span>
+                      {' | '}
+                      <span
+                        contentEditable={true}
+                        suppressContentEditableWarning={true}
+                        onBlur={(e) => handleBlur('experience', e.currentTarget.textContent, exp.id, 'years')}
+                        className="outline-none hover:bg-white/10 p-1"
+                      >
+                        {exp.years}
+                      </span>
+                    </p>
+                    <p
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('experience', e.currentTarget.textContent, exp.id, 'description')}
+                      className="text-[10px] leading-relaxed text-zinc-600 outline-none hover:bg-white/10 p-1"
+                    >
                       {exp.description}
                     </p>
                   </div>
@@ -2756,8 +2963,33 @@ const App = () => {
                   {formData.certifications.map(cert => (
                     <div key={cert.id} className="relative pl-4 border-l-2" style={{ borderColor: theme.primary }}>
                       <div className="absolute -left-[5px] top-0 w-2 h-2 rounded-full" style={{ backgroundColor: theme.primary }} />
-                      <p className="text-xs font-black uppercase text-[#333]">{cert.title}</p>
-                      <p className="text-[10px] font-bold text-zinc-500">{cert.org} • {cert.year}</p>
+                      <p
+                        contentEditable={true}
+                        suppressContentEditableWarning={true}
+                        onBlur={(e) => handleBlur('certification', e.currentTarget.textContent, cert.id, 'title')}
+                        className="text-xs font-black uppercase text-[#333] outline-none hover:bg-white/10 p-1"
+                      >
+                        {cert.title}
+                      </p>
+                      <p className="text-[10px] font-bold text-zinc-500">
+                        <span
+                          contentEditable={true}
+                          suppressContentEditableWarning={true}
+                          onBlur={(e) => handleBlur('certification', e.currentTarget.textContent, cert.id, 'org')}
+                          className="outline-none hover:bg-white/10 p-1"
+                        >
+                          {cert.org}
+                        </span>
+                        {' • '}
+                        <span
+                          contentEditable={true}
+                          suppressContentEditableWarning={true}
+                          onBlur={(e) => handleBlur('certification', e.currentTarget.textContent, cert.id, 'year')}
+                          className="outline-none hover:bg-white/10 p-1"
+                        >
+                          {cert.year}
+                        </span>
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -2987,7 +3219,14 @@ const App = () => {
               {formData.techSkills.frameworks.map((skill, idx) => (
                 <div key={`framework-${idx}`} className="group">
                   <div className="flex justify-between text-[10px] uppercase mb-1">
-                    <span>{skill}</span>
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('techSkills', e.currentTarget.textContent, idx, 'frameworks')}
+                      className="outline-none hover:bg-white/10"
+                    >
+                      {skill}
+                    </span>
                   </div>
                   {/* Visual skill bar matching the template image */}
                   <div className="w-full h-[2px] bg-zinc-700 relative">
@@ -2998,7 +3237,14 @@ const App = () => {
               {formData.techSkills.tools.map((skill, idx) => (
                 <div key={`tool-${idx}`} className="group">
                   <div className="flex justify-between text-[10px] uppercase mb-1">
-                    <span>{skill}</span>
+                    <span
+                      contentEditable={true}
+                      suppressContentEditableWarning={true}
+                      onBlur={(e) => handleBlur('techSkills', e.currentTarget.textContent, idx, 'tools')}
+                      className="outline-none hover:bg-white/10"
+                    >
+                      {skill}
+                    </span>
                   </div>
                   {/* Visual skill bar matching the template image */}
                   <div className="w-full h-[2px] bg-zinc-700 relative">
@@ -3456,13 +3702,64 @@ const App = () => {
     );
   };
 
+
+
+
+
+  // Reusable tilt wrapper for gallery cards (3D-like hover effect)
+  const TiltCard = ({ onClick, children }) => {
+    const ref = useRef(null);
+
+    const handleMouseMove = (e) => {
+      if (!ref.current) return;
+      const rect = ref.current.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / rect.width - 0.5;
+      const y = (e.clientY - rect.top) / rect.height - 0.5;
+
+      const rotateX = y * -12; // tilt toward cursor
+      const rotateY = x * 12;
+
+      ref.current.style.transform = `perspective(900px) rotateX(${rotateX}deg) rotateY(${rotateY}deg) translateY(-6px)`;
+    };
+
+    const handleMouseLeave = () => {
+      if (!ref.current) return;
+      ref.current.style.transform = 'perspective(900px) rotateX(0deg) rotateY(0deg) translateY(0px)';
+    };
+
+    return (
+      <div
+        ref={ref}
+        onMouseMove={handleMouseMove}
+        onMouseLeave={handleMouseLeave}
+        onClick={onClick}
+        className="cursor-pointer transition-transform duration-200 ease-out [transform-style:preserve-3d]"
+      >
+        {children}
+      </div>
+    );
+  };
+
   return (
-    <div className="min-h-screen flex relative bg-gray-50 text-black">
+    <div className="min-h-screen flex flex-col md:flex-row relative text-black bg-slate-950">
+      {/* Modern gradient / glow background */}
+      <div
+        className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
+        aria-hidden="true"
+      >
+        {/* Large soft radial glows */}
+        <div className="absolute -top-40 -left-32 h-96 w-96 rounded-full bg-gradient-to-br from-indigo-500/40 via-sky-400/30 to-transparent blur-3xl" />
+        <div className="absolute -bottom-40 -right-20 h-[28rem] w-[28rem] rounded-full bg-gradient-to-tl from-fuchsia-500/30 via-purple-500/20 to-transparent blur-3xl" />
+        <div className="absolute top-1/3 left-1/2 -translate-x-1/2 h-80 w-[36rem] rounded-[999px] bg-gradient-to-r from-indigo-500/10 via-cyan-400/10 to-purple-500/10 blur-2xl" />
+
+        {/* Subtle grid overlay */}
+        <div className="absolute inset-0 opacity-[0.06] [background-image:linear-gradient(to_right,rgba(148,163,184,0.3)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.3)_1px,transparent_1px)] [background-size:56px_56px]" />
+      </div>
 
       {/* Guidance Button */}
       <button
         onClick={() => setShowGuidance(true)}
-        className="fixed top-4 right-4 z-50 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-colors duration-200"
+        className="fixed right-8 top-8 z-50 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-colors duration-200"
         title="How to use this app"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -3473,7 +3770,7 @@ const App = () => {
       {/* Guidance Modal */}
       {showGuidance && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+          <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
             <div className="p-6">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-2xl font-bold text-gray-800">How to Use Resume Builder</h2>
@@ -3517,12 +3814,6 @@ const App = () => {
                   <p>• Click "Load Data" to upload a previously saved JSON file and continue editing.</p>
                   <p>This is perfect for creating multiple resume versions!</p>
                 </section>
-
-                <section>
-                  <h3 className="text-lg font-semibold mb-2">🔍 Zoom Controls</h3>
-                  <p>Use the floating zoom controls in the bottom-right of the preview to zoom in/out for better editing on smaller screens.</p>
-                </section>
-
                 <section>
                   <h3 className="text-lg font-semibold mb-2">📄 Downloading Your Resume</h3>
                   <p>Click "Download PDF" to generate and download your resume as a high-quality PDF file.</p>
@@ -3554,477 +3845,592 @@ const App = () => {
         </div>
       )}
 
-      {/* Floating Helper for Editor Mode */}
-      {currentView === 'editor' && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-xs px-4 py-2 rounded-full shadow-lg z-50 animate-bounce">
-          👆 Tip: Click directly on the resume text to edit!
-        </div>
-      )}
+
 
       {/* Customization Panel */}
-      <div className="w-80 shadow-lg overflow-y-auto h-screen sticky top-0 bg-white text-black">
-        <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="text-center">
-            <h1 className="text-2xl font-bold text-gray-800">Resume Builder</h1>
-            <p className="text-sm mt-1 text-gray-600">Customize your resume</p>
-          </div>
-
-          {currentView === 'editor' && (
-            <div className="flex items-center justify-between mb-6">
-              <button
-                onClick={() => setCurrentView('gallery')}
-                className="text-[10px] bg-slate-700 text-white px-3 py-1 rounded-full hover:bg-slate-600"
-              >
-                ← Back to Templates
-              </button>
+      {currentView === 'editor' && (
+        <div className="w-full md:w-80 shadow-lg overflow-y-auto md:h-screen md:sticky md:top-0 bg-white text-black">
+          <div className="p-6 space-y-6">
+            {/* Header */}
+            <div className="text-center">
+              <h1 className="text-2xl font-bold text-gray-800">Resume Builder</h1>
+              <p className="text-sm mt-1 text-gray-600">Customize your resume</p>
             </div>
-          )}
 
-          {/* Accent Color */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Accent Color</h3>
-            <div className="grid grid-cols-4 gap-2">
-              {colorOptions.map((color) => (
+            {currentView === 'editor' && (
+              <div className="flex items-center justify-between mb-6">
                 <button
-                  key={color.hex}
-                  onClick={() => setAccentColor(color.hex)}
-                  className={`w-8 h-8 rounded-full border-2 ${accentColor === color.hex ? 'border-gray-800' : 'border-gray-300'
-                    }`}
-                  style={{ backgroundColor: color.hex }}
-                  title={color.name}
-                />
-              ))}
+                  onClick={() => setCurrentView('gallery')}
+                  className="text-[10px] bg-slate-700 text-white px-3 py-1 rounded-full hover:bg-slate-600"
+                >
+                  ← Back to Templates
+                </button>
+              </div>
+            )}
+
+            {currentView === 'gallery' && (
+              <div className="flex items-center justify-between mb-6">
+                <button
+                  onClick={() => setCurrentView('landing')}
+                  className="text-[10px] bg-slate-700 text-white px-3 py-1 rounded-full hover:bg-slate-600"
+                >
+                  ← Back to Landing
+                </button>
+              </div>
+            )}
+
+            {/* Accent Color */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Accent Color</h3>
+              <div className="grid grid-cols-4 gap-2">
+                {colorOptions.map((color) => (
+                  <button
+                    key={color.hex}
+                    onClick={() => setAccentColor(color.hex)}
+                    className={`w-8 h-8 rounded-full border-2 ${accentColor === color.hex ? 'border-gray-800' : 'border-gray-300'
+                      }`}
+                    style={{ backgroundColor: color.hex }}
+                    title={color.name}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Custom Accent Color Picker */}
-          <div className="flex flex-col items-center justify-center p-6 bg-white rounded-3xl border border-gray-200 shadow-2xl">
-            <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-700 mb-6">
-              Accent Color
-            </label>
+            {/* Custom Accent Color Picker */}
+            <div className="flex flex-col items-center justify-center p-6 bg-white rounded-3xl border border-gray-200 shadow-2xl">
+              <label className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-700 mb-6">
+                Accent Color
+              </label>
 
-            <div className="relative flex items-center justify-center cursor-pointer group">
-              {/* THE RAINBOW RING (The Spectrum) */}
-              <div
-                className="w-24 h-24 rounded-full shadow-lg transition-transform duration-300 group-hover:scale-105"
-                style={{
-                  background: `conic-gradient(
+              <div className="relative flex items-center justify-center cursor-pointer group">
+                {/* THE RAINBOW RING (The Spectrum) */}
+                <div
+                  className="w-24 h-24 rounded-full shadow-lg transition-transform duration-300 group-hover:scale-105"
+                  style={{
+                    background: `conic-gradient(
                     #ff0000, #ff8000, #ffff00, #80ff00, #00ff00, #00ff80,
                     #00ffff, #0080ff, #0000ff, #8000ff, #ff00ff, #ff0080, #ff0000
                   )`
-                }}
-              />
+                  }}
+                />
 
-              {/* THE INNER CIRCLE (Creates the 'Donut' effect) */}
-              <div className="absolute w-[65%] h-[65%] bg-white rounded-full flex items-center justify-center border border-gray-300 shadow-inner">
-                {/* CENTER INDICATOR (Shows selected color) */}
-                <div
-                  className="w-6 h-6 rounded-full shadow-md transition-all duration-300 border border-gray-400"
-                  style={{ backgroundColor: accentColor }}
+                {/* THE INNER CIRCLE (Creates the 'Donut' effect) */}
+                <div className="absolute w-[65%] h-[65%] bg-white rounded-full flex items-center justify-center border border-gray-300 shadow-inner">
+                  {/* CENTER INDICATOR (Shows selected color) */}
+                  <div
+                    className="w-6 h-6 rounded-full shadow-md transition-all duration-300 border border-gray-400"
+                    style={{ backgroundColor: accentColor }}
+                  />
+                </div>
+
+                {/* THE FUNCTIONAL INPUT (Invisible overlay) */}
+                <input
+                  type="color"
+                  value={accentColor}
+                  onChange={(e) => setAccentColor(e.target.value)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer rounded-full"
                 />
               </div>
 
-              {/* THE FUNCTIONAL INPUT (Invisible overlay) */}
-              <input
-                type="color"
-                value={accentColor}
-                onChange={(e) => setAccentColor(e.target.value)}
-                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer rounded-full"
-              />
+              {/* HEX LABEL */}
+              <span className="mt-5 text-[10px] font-mono font-bold text-gray-600 tracking-tighter uppercase opacity-60">
+                {accentColor}
+              </span>
             </div>
 
-            {/* HEX LABEL */}
-            <span className="mt-5 text-[10px] font-mono font-bold text-gray-600 tracking-tighter uppercase opacity-60">
-              {accentColor}
-            </span>
-          </div>
+            {/* Grayscale Mode Button - Only visible for Modern Playful template */}
+            {selectedTemplate === 'playful' && (
+              <div className="mt-4">
+                <button
+                  onClick={() => setAccentColor('#000000')}
+                  className="w-full p-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors duration-200"
+                >
+                  Grayscale Mode
+                </button>
+              </div>
+            )}
 
-          {/* Grayscale Mode Button - Only visible for Modern Playful template */}
-          {selectedTemplate === 'playful' && (
-            <div className="mt-4">
-              <button
-                onClick={() => setAccentColor('#000000')}
-                className="w-full p-3 bg-gray-700 hover:bg-gray-600 text-white rounded-lg text-sm font-semibold transition-colors duration-200"
+            {/* Font Selection */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Font Style</h3>
+              <select
+                value={selectedFont}
+                onChange={(e) => setSelectedFont(e.target.value)}
+                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
               >
-                Grayscale Mode
+                {fontOptions.map((font) => (
+                  <option key={font.value} value={font.value}>
+                    {font.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Template Note */}
+            {selectedTemplate === 'accountant' && (
+              <div className="mt-4 p-3 bg-white/10 rounded">
+                <p className="text-[10px] text-gray-400 mb-2">Note: This template uses a specific Garet font style for maximum professionalism.</p>
+              </div>
+            )}
+
+            {/* Panel Colors */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Left Panel Color</h3>
+              <div className="grid grid-cols-4 gap-2">
+                {panelColorOptions.map((color) => (
+                  <button
+                    key={color.hex}
+                    onClick={() => setLeftPanelColor(color.hex)}
+                    className={`w-8 h-8 rounded-full border-2 ${leftPanelColor === color.hex ? 'border-gray-800' : 'border-gray-300'
+                      }`}
+                    style={{ backgroundColor: color.hex }}
+                    title={color.name}
+                  />
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Right Panel Color</h3>
+              <div className="grid grid-cols-4 gap-2">
+                {panelColorOptions.map((color) => (
+                  <button
+                    key={color.hex}
+                    onClick={() => setRightPanelColor(color.hex)}
+                    className={`w-8 h-8 rounded-full border-2 ${rightPanelColor === color.hex ? 'border-gray-800' : 'border-gray-300'
+                      }`}
+                    style={{ backgroundColor: color.hex }}
+                    title={color.name}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Personal Information */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Personal Information</h3>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleInputChange}
+                  placeholder="Full Name"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+                <input
+                  type="text"
+                  name="title"
+                  value={formData.title}
+                  onChange={handleInputChange}
+                  placeholder="Job Title"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+                <textarea
+                  name="about"
+                  value={formData.about}
+                  onChange={handleInputChange}
+                  placeholder="About Me"
+                  rows="3"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+                <input
+                  type="text"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleInputChange}
+                  placeholder="Phone"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+                <input
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleInputChange}
+                  placeholder="Email"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+                <input
+                  type="text"
+                  name="location"
+                  value={formData.location}
+                  onChange={handleInputChange}
+                  placeholder="Location"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePhotoUpload}
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Links */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Links</h3>
+              <div className="space-y-3">
+                <input
+                  type="text"
+                  value={formData.links.portfolio}
+                  onChange={(e) => handleLinksChange('portfolio', e.target.value)}
+                  placeholder="Portfolio URL"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+                <input
+                  type="text"
+                  value={formData.links.github}
+                  onChange={(e) => handleLinksChange('github', e.target.value)}
+                  placeholder="GitHub URL"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+                <input
+                  type="text"
+                  value={formData.links.linkedin}
+                  onChange={(e) => handleLinksChange('linkedin', e.target.value)}
+                  placeholder="LinkedIn URL"
+                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                />
+              </div>
+            </div>
+
+            {/* Experience */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Experience</h3>
+              {formData.experience.map((exp, index) => (
+                <div key={exp.id} className="space-y-3 mb-4 p-3 border border-gray-200 rounded-md">
+                  <input
+                    type="text"
+                    value={exp.position}
+                    onChange={(e) => updateExperience(exp.id, 'position', e.target.value)}
+                    placeholder="Position"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={exp.company}
+                    onChange={(e) => updateExperience(exp.id, 'company', e.target.value)}
+                    placeholder="Company"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={exp.years}
+                    onChange={(e) => updateExperience(exp.id, 'years', e.target.value)}
+                    placeholder="Years"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <textarea
+                    value={exp.description}
+                    onChange={(e) => updateExperience(exp.id, 'description', e.target.value)}
+                    placeholder="Description"
+                    rows="3"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <button
+                    onClick={() => deleteExperience(exp.id)}
+                    className="w-full p-2 bg-red-500 text-white rounded-md text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
+              ))}
+              <button
+                onClick={addExperience}
+                className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
+              >
+                Add Experience
               </button>
             </div>
-          )}
 
-          {/* Font Selection */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Font Style</h3>
-            <select
-              value={selectedFont}
-              onChange={(e) => setSelectedFont(e.target.value)}
-              className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-            >
-              {fontOptions.map((font) => (
-                <option key={font.value} value={font.value}>
-                  {font.name}
-                </option>
+            {/* Projects */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Projects</h3>
+              {formData.projects.map((proj, index) => (
+                <div key={proj.id} className="space-y-3 mb-4 p-3 border border-gray-200 rounded-md">
+                  <input
+                    type="text"
+                    value={proj.title}
+                    onChange={(e) => updateProject(proj.id, 'title', e.target.value)}
+                    placeholder="Project Title"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={proj.tech}
+                    onChange={(e) => updateProject(proj.id, 'tech', e.target.value)}
+                    placeholder="Technologies"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={proj.years}
+                    onChange={(e) => updateProject(proj.id, 'years', e.target.value)}
+                    placeholder="Years"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <textarea
+                    value={proj.description}
+                    onChange={(e) => updateProject(proj.id, 'description', e.target.value)}
+                    placeholder="Description"
+                    rows="3"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <button
+                    onClick={() => deleteProject(proj.id)}
+                    className="w-full p-2 bg-red-500 text-white rounded-md text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
               ))}
-            </select>
-          </div>
-
-          {/* Template Note */}
-          {selectedTemplate === 'accountant' && (
-            <div className="mt-4 p-3 bg-white/10 rounded">
-              <p className="text-[10px] text-gray-400 mb-2">Note: This template uses a specific Garet font style for maximum professionalism.</p>
+              <button
+                onClick={addProject}
+                className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
+              >
+                Add Project
+              </button>
             </div>
-          )}
 
-          {/* Panel Colors */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Left Panel Color</h3>
-            <div className="grid grid-cols-4 gap-2">
-              {panelColorOptions.map((color) => (
-                <button
-                  key={color.hex}
-                  onClick={() => setLeftPanelColor(color.hex)}
-                  className={`w-8 h-8 rounded-full border-2 ${leftPanelColor === color.hex ? 'border-gray-800' : 'border-gray-300'
-                    }`}
-                  style={{ backgroundColor: color.hex }}
-                  title={color.name}
-                />
+            {/* Education */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Education</h3>
+              {formData.education.map((edu, index) => (
+                <div key={edu.id} className="space-y-3 mb-4 p-3 border border-gray-200 rounded-md">
+                  <input
+                    type="text"
+                    value={edu.institution}
+                    onChange={(e) => updateEducation(edu.id, 'institution', e.target.value)}
+                    placeholder="Institution"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={edu.degree}
+                    onChange={(e) => updateEducation(edu.id, 'degree', e.target.value)}
+                    placeholder="Degree"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={edu.years}
+                    onChange={(e) => updateEducation(edu.id, 'years', e.target.value)}
+                    placeholder="Years"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={edu.percentage}
+                    onChange={(e) => updateEducation(edu.id, 'percentage', e.target.value)}
+                    placeholder="Percentage"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={edu.cgpa}
+                    onChange={(e) => updateEducation(edu.id, 'cgpa', e.target.value)}
+                    placeholder="CGPA"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <textarea
+                    value={edu.details}
+                    onChange={(e) => updateEducation(edu.id, 'details', e.target.value)}
+                    placeholder="Details"
+                    rows="2"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <button
+                    onClick={() => deleteEducation(edu.id)}
+                    className="w-full p-2 bg-red-500 text-white rounded-md text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
               ))}
+              <button
+                onClick={addEducation}
+                className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
+              >
+                Add Education
+              </button>
             </div>
-          </div>
 
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Right Panel Color</h3>
-            <div className="grid grid-cols-4 gap-2">
-              {panelColorOptions.map((color) => (
-                <button
-                  key={color.hex}
-                  onClick={() => setRightPanelColor(color.hex)}
-                  className={`w-8 h-8 rounded-full border-2 ${rightPanelColor === color.hex ? 'border-gray-800' : 'border-gray-300'
-                    }`}
-                  style={{ backgroundColor: color.hex }}
-                  title={color.name}
-                />
+            {/* Certifications */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Certifications</h3>
+              {formData.certifications.map((cert, index) => (
+                <div key={cert.id} className="space-y-3 mb-4 p-3 border border-gray-200 rounded-md">
+                  <input
+                    type="text"
+                    value={cert.title}
+                    onChange={(e) => updateCertification(cert.id, 'title', e.target.value)}
+                    placeholder="Certification Title"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={cert.org}
+                    onChange={(e) => updateCertification(cert.id, 'org', e.target.value)}
+                    placeholder="Organization"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <input
+                    type="text"
+                    value={cert.year}
+                    onChange={(e) => updateCertification(cert.id, 'year', e.target.value)}
+                    placeholder="Year"
+                    className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
+                  />
+                  <button
+                    onClick={() => deleteCertification(cert.id)}
+                    className="w-full p-2 bg-red-500 text-white rounded-md text-sm"
+                  >
+                    Delete
+                  </button>
+                </div>
               ))}
+              <button
+                onClick={addCertification}
+                className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
+              >
+                Add Certification
+              </button>
             </div>
-          </div>
 
-          {/* Personal Information */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Personal Information</h3>
-            <div className="space-y-3">
-              <input
-                type="text"
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                placeholder="Full Name"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-              <input
-                type="text"
-                name="title"
-                value={formData.title}
-                onChange={handleInputChange}
-                placeholder="Job Title"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-              <textarea
-                name="about"
-                value={formData.about}
-                onChange={handleInputChange}
-                placeholder="About Me"
-                rows="3"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-              <input
-                type="text"
-                name="phone"
-                value={formData.phone}
-                onChange={handleInputChange}
-                placeholder="Phone"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-              <input
-                type="email"
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                placeholder="Email"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-              <input
-                type="text"
-                name="location"
-                value={formData.location}
-                onChange={handleInputChange}
-                placeholder="Location"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-              <input
-                type="file"
-                accept="image/*"
-                onChange={handlePhotoUpload}
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
+            {/* Technical Skills */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Technical Skills</h3>
+
+              {/* Languages */}
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-black mb-2">Languages</h4>
+                {formData.techSkills.languages.map((lang, index) => (
+                  <div key={index} className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={lang}
+                      onChange={(e) => {
+                        const newLanguages = [...formData.techSkills.languages];
+                        newLanguages[index] = e.target.value;
+                        setFormData({ ...formData, techSkills: { ...formData.techSkills, languages: newLanguages } });
+                      }}
+                      placeholder="Language"
+                      className="flex-1 p-2 border border-gray-300 rounded-md text-sm bg-white"
+                    />
+                    <button
+                      onClick={() => {
+                        const newLanguages = formData.techSkills.languages.filter((_, i) => i !== index);
+                        setFormData({ ...formData, techSkills: { ...formData.techSkills, languages: newLanguages } });
+                      }}
+                      className="px-3 py-2 bg-red-500 text-white rounded-md text-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const newLanguages = [...formData.techSkills.languages, ""];
+                    setFormData({ ...formData, techSkills: { ...formData.techSkills, languages: newLanguages } });
+                  }}
+                  className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
+                >
+                  Add Language
+                </button>
+              </div>
+
+              {/* Frameworks */}
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-black mb-2">Frameworks</h4>
+                {formData.techSkills.frameworks.map((fw, index) => (
+                  <div key={index} className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={fw}
+                      onChange={(e) => {
+                        const newFrameworks = [...formData.techSkills.frameworks];
+                        newFrameworks[index] = e.target.value;
+                        setFormData({ ...formData, techSkills: { ...formData.techSkills, frameworks: newFrameworks } });
+                      }}
+                      placeholder="Framework"
+                      className="flex-1 p-2 border border-gray-300 rounded-md text-sm bg-white"
+                    />
+                    <button
+                      onClick={() => {
+                        const newFrameworks = formData.techSkills.frameworks.filter((_, i) => i !== index);
+                        setFormData({ ...formData, techSkills: { ...formData.techSkills, frameworks: newFrameworks } });
+                      }}
+                      className="px-3 py-2 bg-red-500 text-white rounded-md text-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const newFrameworks = [...formData.techSkills.frameworks, ""];
+                    setFormData({ ...formData, techSkills: { ...formData.techSkills, frameworks: newFrameworks } });
+                  }}
+                  className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
+                >
+                  Add Framework
+                </button>
+              </div>
+
+              {/* Tools */}
+              <div className="mb-4">
+                <h4 className="text-xs font-semibold text-black mb-2">Tools</h4>
+                {formData.techSkills.tools.map((tool, index) => (
+                  <div key={index} className="flex gap-2 mb-2">
+                    <input
+                      type="text"
+                      value={tool}
+                      onChange={(e) => {
+                        const newTools = [...formData.techSkills.tools];
+                        newTools[index] = e.target.value;
+                        setFormData({ ...formData, techSkills: { ...formData.techSkills, tools: newTools } });
+                      }}
+                      placeholder="Tool"
+                      className="flex-1 p-2 border border-gray-300 rounded-md text-sm bg-white"
+                    />
+                    <button
+                      onClick={() => {
+                        const newTools = formData.techSkills.tools.filter((_, i) => i !== index);
+                        setFormData({ ...formData, techSkills: { ...formData.techSkills, tools: newTools } });
+                      }}
+                      className="px-3 py-2 bg-red-500 text-white rounded-md text-sm"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+                <button
+                  onClick={() => {
+                    const newTools = [...formData.techSkills.tools, ""];
+                    setFormData({ ...formData, techSkills: { ...formData.techSkills, tools: newTools } });
+                  }}
+                  className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
+                >
+                  Add Tool
+                </button>
+              </div>
             </div>
-          </div>
-
-          {/* Links */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Links</h3>
-            <div className="space-y-3">
-              <input
-                type="text"
-                value={formData.links.portfolio}
-                onChange={(e) => handleLinksChange('portfolio', e.target.value)}
-                placeholder="Portfolio URL"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-              <input
-                type="text"
-                value={formData.links.github}
-                onChange={(e) => handleLinksChange('github', e.target.value)}
-                placeholder="GitHub URL"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-              <input
-                type="text"
-                value={formData.links.linkedin}
-                onChange={(e) => handleLinksChange('linkedin', e.target.value)}
-                placeholder="LinkedIn URL"
-                className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-              />
-            </div>
-          </div>
-
-          {/* Experience */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Experience</h3>
-            {formData.experience.map((exp, index) => (
-              <div key={exp.id} className="space-y-3 mb-4 p-3 border border-gray-200 rounded-md">
-                <input
-                  type="text"
-                  value={exp.position}
-                  onChange={(e) => updateExperience(exp.id, 'position', e.target.value)}
-                  placeholder="Position"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={exp.company}
-                  onChange={(e) => updateExperience(exp.id, 'company', e.target.value)}
-                  placeholder="Company"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={exp.years}
-                  onChange={(e) => updateExperience(exp.id, 'years', e.target.value)}
-                  placeholder="Years"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <textarea
-                  value={exp.description}
-                  onChange={(e) => updateExperience(exp.id, 'description', e.target.value)}
-                  placeholder="Description"
-                  rows="3"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <button
-                  onClick={() => deleteExperience(exp.id)}
-                  className="w-full p-2 bg-red-500 text-white rounded-md text-sm"
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addExperience}
-              className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
-            >
-              Add Experience
-            </button>
-          </div>
-
-          {/* Projects */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Projects</h3>
-            {formData.projects.map((proj, index) => (
-              <div key={proj.id} className="space-y-3 mb-4 p-3 border border-gray-200 rounded-md">
-                <input
-                  type="text"
-                  value={proj.title}
-                  onChange={(e) => updateProject(proj.id, 'title', e.target.value)}
-                  placeholder="Project Title"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={proj.tech}
-                  onChange={(e) => updateProject(proj.id, 'tech', e.target.value)}
-                  placeholder="Technologies"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={proj.years}
-                  onChange={(e) => updateProject(proj.id, 'years', e.target.value)}
-                  placeholder="Years"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <textarea
-                  value={proj.description}
-                  onChange={(e) => updateProject(proj.id, 'description', e.target.value)}
-                  placeholder="Description"
-                  rows="3"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <button
-                  onClick={() => deleteProject(proj.id)}
-                  className="w-full p-2 bg-red-500 text-white rounded-md text-sm"
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addProject}
-              className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
-            >
-              Add Project
-            </button>
-          </div>
-
-          {/* Education */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Education</h3>
-            {formData.education.map((edu, index) => (
-              <div key={edu.id} className="space-y-3 mb-4 p-3 border border-gray-200 rounded-md">
-                <input
-                  type="text"
-                  value={edu.institution}
-                  onChange={(e) => updateEducation(edu.id, 'institution', e.target.value)}
-                  placeholder="Institution"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={edu.degree}
-                  onChange={(e) => updateEducation(edu.id, 'degree', e.target.value)}
-                  placeholder="Degree"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={edu.years}
-                  onChange={(e) => updateEducation(edu.id, 'years', e.target.value)}
-                  placeholder="Years"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={edu.percentage}
-                  onChange={(e) => updateEducation(edu.id, 'percentage', e.target.value)}
-                  placeholder="Percentage"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={edu.cgpa}
-                  onChange={(e) => updateEducation(edu.id, 'cgpa', e.target.value)}
-                  placeholder="CGPA"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <textarea
-                  value={edu.details}
-                  onChange={(e) => updateEducation(edu.id, 'details', e.target.value)}
-                  placeholder="Details"
-                  rows="2"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <button
-                  onClick={() => deleteEducation(edu.id)}
-                  className="w-full p-2 bg-red-500 text-white rounded-md text-sm"
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addEducation}
-              className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
-            >
-              Add Education
-            </button>
-          </div>
-
-          {/* Certifications */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Certifications</h3>
-            {formData.certifications.map((cert, index) => (
-              <div key={cert.id} className="space-y-3 mb-4 p-3 border border-gray-200 rounded-md">
-                <input
-                  type="text"
-                  value={cert.title}
-                  onChange={(e) => updateCertification(cert.id, 'title', e.target.value)}
-                  placeholder="Certification Title"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={cert.org}
-                  onChange={(e) => updateCertification(cert.id, 'org', e.target.value)}
-                  placeholder="Organization"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <input
-                  type="text"
-                  value={cert.year}
-                  onChange={(e) => updateCertification(cert.id, 'year', e.target.value)}
-                  placeholder="Year"
-                  className="w-full p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <button
-                  onClick={() => deleteCertification(cert.id)}
-                  className="w-full p-2 bg-red-500 text-white rounded-md text-sm"
-                >
-                  Delete
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addCertification}
-              className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
-            >
-              Add Certification
-            </button>
-          </div>
-
-          {/* Technical Skills */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Technical Skills</h3>
 
             {/* Languages */}
-            <div className="mb-4">
-              <h4 className="text-xs font-semibold text-black mb-2">Languages</h4>
-              {formData.techSkills.languages.map((lang, index) => (
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Languages</h3>
+              {formData.languages.map((lang, index) => (
                 <div key={index} className="flex gap-2 mb-2">
                   <input
                     type="text"
                     value={lang}
-                    onChange={(e) => {
-                      const newLanguages = [...formData.techSkills.languages];
-                      newLanguages[index] = e.target.value;
-                      setFormData({ ...formData, techSkills: { ...formData.techSkills, languages: newLanguages } });
-                    }}
+                    onChange={(e) => handleLanguageChange(index, e.target.value)}
                     placeholder="Language"
                     className="flex-1 p-2 border border-gray-300 rounded-md text-sm bg-white"
                   />
                   <button
-                    onClick={() => {
-                      const newLanguages = formData.techSkills.languages.filter((_, i) => i !== index);
-                      setFormData({ ...formData, techSkills: { ...formData.techSkills, languages: newLanguages } });
-                    }}
+                    onClick={() => deleteLanguage(index)}
                     className="px-3 py-2 bg-red-500 text-white rounded-md text-sm"
                   >
                     Remove
@@ -4032,37 +4438,27 @@ const App = () => {
                 </div>
               ))}
               <button
-                onClick={() => {
-                  const newLanguages = [...formData.techSkills.languages, ""];
-                  setFormData({ ...formData, techSkills: { ...formData.techSkills, languages: newLanguages } });
-                }}
+                onClick={addLanguage}
                 className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
               >
                 Add Language
               </button>
             </div>
 
-            {/* Frameworks */}
-            <div className="mb-4">
-              <h4 className="text-xs font-semibold text-black mb-2">Frameworks</h4>
-              {formData.techSkills.frameworks.map((fw, index) => (
+            {/* Expertise */}
+            <div>
+              <h3 className="text-sm font-semibold text-black mb-3">Expertise</h3>
+              {formData.expertise.map((exp, index) => (
                 <div key={index} className="flex gap-2 mb-2">
                   <input
                     type="text"
-                    value={fw}
-                    onChange={(e) => {
-                      const newFrameworks = [...formData.techSkills.frameworks];
-                      newFrameworks[index] = e.target.value;
-                      setFormData({ ...formData, techSkills: { ...formData.techSkills, frameworks: newFrameworks } });
-                    }}
-                    placeholder="Framework"
+                    value={exp}
+                    onChange={(e) => handleExpertiseChange(index, e.target.value)}
+                    placeholder="Expertise"
                     className="flex-1 p-2 border border-gray-300 rounded-md text-sm bg-white"
                   />
                   <button
-                    onClick={() => {
-                      const newFrameworks = formData.techSkills.frameworks.filter((_, i) => i !== index);
-                      setFormData({ ...formData, techSkills: { ...formData.techSkills, frameworks: newFrameworks } });
-                    }}
+                    onClick={() => deleteExpertise(index)}
                     className="px-3 py-2 bg-red-500 text-white rounded-md text-sm"
                   >
                     Remove
@@ -4070,329 +4466,213 @@ const App = () => {
                 </div>
               ))}
               <button
-                onClick={() => {
-                  const newFrameworks = [...formData.techSkills.frameworks, ""];
-                  setFormData({ ...formData, techSkills: { ...formData.techSkills, frameworks: newFrameworks } });
-                }}
+                onClick={addExpertise}
                 className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
               >
-                Add Framework
+                Add Expertise
               </button>
             </div>
 
-            {/* Tools */}
-            <div className="mb-4">
-              <h4 className="text-xs font-semibold text-black mb-2">Tools</h4>
-              {formData.techSkills.tools.map((tool, index) => (
-                <div key={index} className="flex gap-2 mb-2">
-                  <input
-                    type="text"
-                    value={tool}
-                    onChange={(e) => {
-                      const newTools = [...formData.techSkills.tools];
-                      newTools[index] = e.target.value;
-                      setFormData({ ...formData, techSkills: { ...formData.techSkills, tools: newTools } });
-                    }}
-                    placeholder="Tool"
-                    className="flex-1 p-2 border border-gray-300 rounded-md text-sm bg-white"
-                  />
-                  <button
-                    onClick={() => {
-                      const newTools = formData.techSkills.tools.filter((_, i) => i !== index);
-                      setFormData({ ...formData, techSkills: { ...formData.techSkills, tools: newTools } });
-                    }}
-                    className="px-3 py-2 bg-red-500 text-white rounded-md text-sm"
-                  >
-                    Remove
-                  </button>
-                </div>
-              ))}
+
+
+            {/* Save/Load Project */}
+            <div className="flex gap-2 mt-4 pt-4 border-t border-white/10">
               <button
-                onClick={() => {
-                  const newTools = [...formData.techSkills.tools, ""];
-                  setFormData({ ...formData, techSkills: { ...formData.techSkills, tools: newTools } });
-                }}
-                className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
+                onClick={exportData}
+                className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-bold py-2 rounded flex items-center justify-center gap-2"
               >
-                Add Tool
+                💾 Save Data
+              </button>
+              <label className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-bold py-2 rounded flex items-center justify-center gap-2 cursor-pointer">
+                📂 Load Data
+                <input type="file" className="hidden" accept=".json" onChange={importData} />
+              </label>
+            </div>
+
+
+
+            {/* Download PDF */}
+            <div>
+              <button
+                onClick={downloadPDF}
+                className="w-full p-2 bg-green-500 text-white rounded-md text-sm"
+              >
+                Download PDF
               </button>
             </div>
-          </div>
-
-          {/* Languages */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Languages</h3>
-            {formData.languages.map((lang, index) => (
-              <div key={index} className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  value={lang}
-                  onChange={(e) => handleLanguageChange(index, e.target.value)}
-                  placeholder="Language"
-                  className="flex-1 p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <button
-                  onClick={() => deleteLanguage(index)}
-                  className="px-3 py-2 bg-red-500 text-white rounded-md text-sm"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addLanguage}
-              className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
-            >
-              Add Language
-            </button>
-          </div>
-
-          {/* Expertise */}
-          <div>
-            <h3 className="text-sm font-semibold text-black mb-3">Expertise</h3>
-            {formData.expertise.map((exp, index) => (
-              <div key={index} className="flex gap-2 mb-2">
-                <input
-                  type="text"
-                  value={exp}
-                  onChange={(e) => handleExpertiseChange(index, e.target.value)}
-                  placeholder="Expertise"
-                  className="flex-1 p-2 border border-gray-300 rounded-md text-sm bg-white"
-                />
-                <button
-                  onClick={() => deleteExpertise(index)}
-                  className="px-3 py-2 bg-red-500 text-white rounded-md text-sm"
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
-            <button
-              onClick={addExpertise}
-              className="w-full p-2 bg-blue-500 text-white rounded-md text-sm"
-            >
-              Add Expertise
-            </button>
-          </div>
-
-
-
-          {/* Save/Load Project */}
-          <div className="flex gap-2 mt-4 pt-4 border-t border-white/10">
-            <button
-              onClick={exportData}
-              className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-bold py-2 rounded flex items-center justify-center gap-2"
-            >
-              💾 Save Data
-            </button>
-            <label className="flex-1 bg-slate-700 hover:bg-slate-600 text-white text-[10px] font-bold py-2 rounded flex items-center justify-center gap-2 cursor-pointer">
-              📂 Load Data
-              <input type="file" className="hidden" accept=".json" onChange={importData} />
-            </label>
-          </div>
-
-
-
-          {/* Download PDF */}
-          <div>
-            <button
-              onClick={downloadPDF}
-              className="w-full p-2 bg-green-500 text-white rounded-md text-sm"
-            >
-              Download PDF
-            </button>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Main Content */}
-      <main className="flex-1 h-full bg-zinc-200 overflow-y-auto">
-        {currentView === 'gallery' ? (
-          <div className="p-12 w-full max-w-6xl">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-              <div onClick={() => { setSelectedTemplate('modern'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 flex">
-                  <div className="w-1/3 bg-[#E8DCC4]"></div>
-                  <div className="w-2/3 bg-white p-4">
-                    <div className="h-2 w-12 bg-[#2D3E50] mb-2"></div>
-                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
-                    <div className="h-3 w-16 bg-zinc-100"></div>
-                  </div>
+      <main className="flex-1 h-full overflow-y-auto">
+        {currentView === 'editor' ? (
+          <div className="flex flex-col lg:flex-row h-full bg-zinc-200">
+            {/* Resume Preview - Left/Center */}
+            <div className="flex-1 p-4 md:p-8 flex justify-center items-start bg-zinc-200 overflow-y-auto overflow-x-hidden">
+              <div className="relative">
+                {/* Resume Container */}
+                <div
+                  ref={resumeRef}
+                  className="shadow-2xl bg-white transition-transform duration-300 ease-out border border-gray-200"
+                  style={{
+                    width: '210mm',
+                    minHeight: '297mm',
+                    transform: 'scale(1)',
+                    transformOrigin: 'top center',
+                    overflowX: 'hidden'
+                  }}
+                >
+                  {selectedTemplate === 'creative' && <CreativeGreenTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
+                  {selectedTemplate === 'modern' && <ModernTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} isDarkMode={false} handleBlur={handleBlur} />}
+                  {selectedTemplate === 'minimalist-accountant' && <MinimalistAccountantTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
+                  {selectedTemplate === 'blue-geometric' && <BlueGeometricTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
+                  {selectedTemplate === 'retro' && <PlayfulRetroTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
+                  {selectedTemplate === 'new-playful-retro' && <NewPlayfulRetroTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
+                  {selectedTemplate === 'professional-black' && <ProfessionalBlackTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
+                  {selectedTemplate === 'modern-playful' && <ModernPlayfulTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
                 </div>
-                <div className="p-4 font-bold text-center bg-[#2D3E50] text-white">Modern</div>
-              </div>
-              <div onClick={() => { setSelectedTemplate('creative'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 flex">
-                  <div className="w-1/3 bg-[#E8DCC4]"></div>
-                  <div className="w-2/3 bg-white p-4">
-                    <div className="h-2 w-12 bg-emerald-700 mb-2"></div>
-                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
-                    <div className="h-3 w-16 bg-zinc-100"></div>
-                  </div>
-                </div>
-                <div className="p-4 font-bold text-center bg-emerald-700 text-white">Creative Green</div>
-              </div>
-              <div onClick={() => { setSelectedTemplate('geometric'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 flex">
-                  <div className="w-1/3 bg-blue-600"></div>
-                  <div className="w-2/3 bg-white p-4">
-                    <div className="h-2 w-12 bg-blue-600 mb-2"></div>
-                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
-                    <div className="h-3 w-16 bg-zinc-100"></div>
-                  </div>
-                </div>
-                <div className="p-4 font-bold text-center bg-blue-600 text-white">Blue Geometric</div>
-              </div>
-              <div onClick={() => { setSelectedTemplate('retro'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 flex">
-                  <div className="w-1/3 bg-[#E8A87C]"></div>
-                  <div className="w-2/3 bg-[#FFFBF2] p-4">
-                    <div className="h-2 w-12 bg-[#E8A87C] mb-2"></div>
-                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
-                    <div className="h-3 w-16 bg-zinc-100"></div>
-                  </div>
-                </div>
-                <div className="p-4 font-bold text-center bg-[#E8A87C] text-white">Playful Retro</div>
-              </div>
-              <div onClick={() => { setSelectedTemplate('accountant'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-[#fcfcfc] p-4">
-                  <div className="h-2 w-12 bg-[#303030] mb-2"></div>
-                  <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
-                  <div className="h-3 w-16 bg-zinc-100"></div>
-                </div>
-                <div className="p-4 font-bold text-center bg-[#303030] text-white">Minimalist Accountant</div>
-              </div>
-              <div onClick={() => { setSelectedTemplate('playful'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-[#E5E7EB] p-4">
-                  <div className="h-2 w-12 bg-[#2D3E50] mb-2"></div>
-                  <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
-                  <div className="h-3 w-16 bg-zinc-100"></div>
-                </div>
-                <div className="p-4 font-bold text-center bg-[#2D3E50] text-white">Modern Playful</div>
-              </div>
-              <div onClick={() => { setSelectedTemplate('new-retro'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 bg-[#FFFBF2] p-4">
-                  <div className="h-2 w-12 bg-[#E8A87C] mb-2"></div>
-                  <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
-                  <div className="h-3 w-16 bg-zinc-100"></div>
-                </div>
-                <div className="p-4 font-bold text-center bg-[#E8A87C] text-white">New Playful Retro</div>
-              </div>
-              <div onClick={() => { setSelectedTemplate('professional-black'); setCurrentView('editor'); }} className="cursor-pointer hover:scale-105 transition-all shadow-xl rounded-lg overflow-hidden bg-white">
-                <div className="w-full h-48 flex">
-                  <div className="w-1/3 bg-[#1a1a1a]"></div>
-                  <div className="w-2/3 bg-white p-4">
-                    <div className="h-2 w-12 bg-yellow-400 mb-2"></div>
-                    <div className="h-4 w-20 bg-zinc-200 mb-1"></div>
-                    <div className="h-3 w-16 bg-zinc-100"></div>
-                  </div>
-                </div>
-                <div className="p-4 font-bold text-center bg-black text-white">Professional Contrast</div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className="relative w-full h-full flex">
-            {/* Resume Preview - Left Side */}
-            <div className="flex-1 flex items-center justify-center">
-              <div
-                ref={resumeRef}
-                className="w-[210mm] h-[297mm] shadow-2xl flex-shrink-0 bg-white overflow-hidden transition-all duration-300 origin-top"
-                style={{
-                  fontFamily: selectedFont
-                }}
-              >
-                {selectedTemplate === 'modern' && <ModernTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} />}
-                {selectedTemplate === 'creative' && <CreativeGreenTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} />}
-                {selectedTemplate === 'geometric' && <BlueGeometricTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-                {selectedTemplate === 'retro' && <PlayfulRetroTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-                {selectedTemplate === 'accountant' && <MinimalistAccountantTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-                {selectedTemplate === 'playful' && <ModernPlayfulTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-                {selectedTemplate === 'new-retro' && <NewPlayfulRetroTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} />}
-        {selectedTemplate === 'professional-black' && <ProfessionalBlackTemplate formData={formData} accentColor={accentColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
-
-      </div>
-
-
-
-      {/* ZOOM CONTROLS */}
-
-      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 bg-white/10 backdrop-blur-md p-1.5 rounded-full border border-white/20 shadow-xl">
-                <button onClick={() => setZoom(z => Math.max(0.5, z - 0.1))} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full">-</button>
-                <span className="text-[10px] text-black font-mono w-8 text-center">{Math.round(zoom * 100)}%</span>
-                <button onClick={() => setZoom(z => Math.min(1.5, z + 0.1))} className="w-6 h-6 flex items-center justify-center text-white hover:bg-white/20 rounded-full">+</button>
               </div>
             </div>
 
-            {/* AI Suggestions Panel - Right Side */}
-            <div className="w-80 overflow-y-auto h-full bg-gray-50 text-black p-4">
-              <div className="space-y-6">
-                {/* Header */}
-                <div className="text-center mb-6">
-                  <div className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white px-4 py-2 rounded-full text-sm font-semibold shadow-lg">
-                    <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                      <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
-                    </svg>
-                    AI Assistant
-                  </div>
-                  <p className="text-xs mt-2 text-gray-600">Created By KRISH PATEL</p>
+            {/* AI Suggestions Panel - Right */}
+            <div className="w-full lg:w-96 h-full bg-white border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto">
+              <div className="p-6 space-y-6">
+                <div className="text-center">
+                  <h2 className="text-xl font-bold text-gray-800 mb-2">AI Assistant</h2>
+                  <p className="text-sm text-gray-600">Get AI-powered suggestions for your resume</p>
                 </div>
 
-                {/* API Key Section */}
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-gray-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd"/>
-                    </svg>
-                    <h4 className="text-sm font-semibold text-gray-800">API Key</h4>
+                {/* API Key Setup */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <KeyRound className="w-4 h-4 text-blue-600" />
+                    <span>Gemini API Key</span>
                   </div>
-                  <label className="block text-xs font-medium mb-2 text-gray-600">Enter your key here.....</label>
                   <input
                     type="password"
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="Enter API key or leave empty to use .env"
-                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-purple-300 transition-colors"
+                    placeholder="Enter your Gemini API key"
+                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                  <button
+                    onClick={() => {
+                      localStorage.setItem('gemini_api_key', apiKey);
+                      alert('API Key saved!');
+                    }}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    Save API Key
+                  </button>
                 </div>
 
-                {/* Resume Summary Section */}
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-purple-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clipRule="evenodd"/>
-                    </svg>
-                    <h4 className="text-sm font-semibold text-gray-800">Resume Summary</h4>
-                  </div>
+                {/* Skill Suggestions */}
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Wand2 className="w-4 h-4 text-green-600" />
+                    <span>Suggest Skills</span>
+                  </h3>
+                  <input
+                    type="text"
+                    value={skillInput}
+                    onChange={(e) => setSkillInput(e.target.value)}
+                    placeholder="Enter job title or field (e.g., 'React Developer')"
+                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    onClick={handleSuggestSkills}
+                    disabled={aiSuggestionLoading}
+                    className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {aiSuggestionLoading ? 'Generating...' : 'Get Skill Suggestions'}
+                  </button>
+                  {suggestedSkills.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium text-gray-700">Suggested Skills:</h4>
+                      <div className="flex flex-wrap gap-2">
+                        {suggestedSkills.map((skill, index) => (
+                          <button
+                            key={index}
+                            onClick={() => addSuggestedSkill(skill)}
+                            className="px-3 py-1 bg-blue-100 hover:bg-blue-200 text-blue-800 rounded-full text-xs font-medium transition-colors"
+                          >
+                            + {skill}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bullet Point Generation */}
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <ListChecks className="w-4 h-4 text-purple-600" />
+                    <span>Generate Bullet Points</span>
+                  </h3>
+                  <input
+                    type="text"
+                    value={roleInput}
+                    onChange={(e) => setRoleInput(e.target.value)}
+                    placeholder="Job role (e.g., 'Frontend Developer')"
+                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <input
+                    type="text"
+                    value={companyInput}
+                    onChange={(e) => setCompanyInput(e.target.value)}
+                    placeholder="Company name"
+                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    onClick={handleSuggestBullets}
+                    disabled={aiSuggestionLoading}
+                    className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {aiSuggestionLoading ? 'Generating...' : 'Generate Bullet Points'}
+                  </button>
+                  {suggestedBullets.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="text-sm font-medium text-gray-700">Suggested Bullet Points:</h4>
+                      <div className="space-y-2">
+                        {suggestedBullets.map((bullet, index) => (
+                          <button
+                            key={index}
+                            onClick={() => addSuggestedBullet(bullet)}
+                            className="w-full text-left p-3 bg-gray-50 hover:bg-gray-100 rounded-lg text-sm transition-colors border-l-4 border-purple-500"
+                          >
+                            {bullet}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Summary Generation */}
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Quote className="w-4 h-4 text-indigo-600" />
+                    <span>Generate Summary</span>
+                  </h3>
                   <button
                     onClick={handleGenerateSummary}
                     disabled={aiSuggestionLoading}
-                    className="w-full p-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-400 text-white py-2 rounded-lg text-sm font-medium transition-colors"
                   >
-                    {aiSuggestionLoading ? (
-                      <>
-                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                        </svg>
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd"/>
-                        </svg>
-                        Generate Resume Summary
-                      </>
-                    )}
+                    {aiSuggestionLoading ? 'Generating...' : 'Generate Professional Summary'}
                   </button>
                   {summaryText && (
-                    <div className="mt-3 p-3 bg-gradient-to-r from-green-50 to-emerald-50 rounded-lg border border-green-200">
-                      <p className="text-xs font-semibold text-green-800 mb-2">Generated Summary:</p>
-                      <p className="text-xs text-gray-700 mb-3">{summaryText}</p>
+                    <div className="p-3 bg-indigo-50 rounded-lg">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Generated Summary:</h4>
+                      <p className="text-sm text-gray-600">{summaryText}</p>
                       <button
-                        onClick={() => setFormData({ ...formData, about: summaryText })}
-                        className="w-full px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded text-xs font-semibold transition-colors"
+                        onClick={() => {
+                          setFormData({ ...formData, about: summaryText });
+                          setSummaryText('');
+                        }}
+                        className="mt-2 px-3 py-1 bg-indigo-600 text-white rounded text-xs hover:bg-indigo-700 transition-colors"
                       >
                         Use This Summary
                       </button>
@@ -4400,179 +4680,38 @@ const App = () => {
                   )}
                 </div>
 
-                {/* Skills Section */}
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M11.3 1.046A1 1 0 0112 2v5h4a1 1 0 01.82 1.573l-7 10A1 1 0 018 18v-5H4a1 1 0 01-.82-1.573l7-10a1 1 0 011.12-.38z" clipRule="evenodd"/>
-                    </svg>
-                    <h4 className="text-sm font-semibold text-gray-800">Skills</h4>
-                  </div>
-                  <input
-                    type="text"
-                    value={skillInput}
-                    onChange={(e) => setSkillInput(e.target.value)}
-                    placeholder="Enter a skill (e.g., React)"
-                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-blue-300 transition-colors mb-3"
-                  />
-                  <div className="text-xs text-gray-500 mb-3">
-                    <span className="font-medium">Examples:</span> React, Python, UI/UX, Data Analysis
-                  </div>
-                  <button
-                    onClick={handleSuggestSkills}
-                    disabled={aiSuggestionLoading || !skillInput.trim()}
-                    className="w-full p-3 bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
-                  >
-                    {aiSuggestionLoading ? (
-                      <>
-                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                        </svg>
-                        Suggesting...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd"/>
-                        </svg>
-                        Suggest Related Skills
-                      </>
-                    )}
-                  </button>
-                  {suggestedSkills.length > 0 && (
-                    <div className="mt-3 p-3 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-lg border border-blue-200">
-                      <p className="text-xs font-semibold text-blue-800 mb-2">Suggested Skills:</p>
-                      <div className="space-y-2">
-                        {suggestedSkills.map((skill, index) => (
-                          <div key={index} className="flex items-center justify-between p-2 bg-white rounded border">
-                            <span className="text-xs text-gray-700">{skill}</span>
-                            <button
-                              onClick={() => addSuggestedSkill(skill)}
-                              className="px-2 py-1 bg-blue-500 hover:bg-blue-600 text-white rounded text-xs font-semibold transition-colors"
-                            >
-                              Add
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Bullet Points Section */}
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-indigo-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" clipRule="evenodd"/>
-                    </svg>
-                    <h4 className="text-sm font-semibold text-gray-800">Bullet Points</h4>
-                  </div>
-                  <input
-                    type="text"
-                    value={roleInput}
-                    onChange={(e) => setRoleInput(e.target.value)}
-                    placeholder="Job Role (e.g., Software Engineer)"
-                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-indigo-300 transition-colors mb-2"
-                  />
-                  <input
-                    type="text"
-                    value={companyInput}
-                    onChange={(e) => setCompanyInput(e.target.value)}
-                    placeholder="Company Name"
-                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-indigo-300 transition-colors mb-3"
-                  />
-                  <div className="text-xs text-gray-500 mb-3">
-                    <span className="font-medium">Examples:</span> Frontend Developer, Google, Microsoft
-                  </div>
-                  <button
-                    onClick={handleSuggestBullets}
-                    disabled={aiSuggestionLoading || !roleInput.trim() || !companyInput.trim()}
-                    className="w-full p-3 bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
-                  >
-                    {aiSuggestionLoading ? (
-                      <>
-                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                        </svg>
-                        Generating...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.293l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clipRule="evenodd"/>
-                        </svg>
-                        Suggest Bullet Points
-                      </>
-                    )}
-                  </button>
-                  {suggestedBullets.length > 0 && (
-                    <div className="mt-3 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
-                      <p className="text-xs font-semibold text-indigo-800 mb-2">Suggested Bullet Points:</p>
-                      <div className="space-y-2">
-                        {suggestedBullets.map((bullet, index) => (
-                          <div key={index} className="flex items-start gap-2 p-2 bg-white rounded border">
-                            <span className="text-xs text-gray-700 flex-1 leading-relaxed">{bullet}</span>
-                            <button
-                              onClick={() => addSuggestedBullet(bullet)}
-                              className="px-2 py-1 bg-indigo-500 hover:bg-indigo-600 text-white rounded text-xs font-semibold transition-colors flex-shrink-0"
-                            >
-                              Add
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* Content Improvement Section */}
-                <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <svg className="w-4 h-4 text-orange-500" fill="currentColor" viewBox="0 0 20 20">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-                    </svg>
-                    <h4 className="text-sm font-semibold text-gray-800">Content Improvement</h4>
-                  </div>
+                {/* Content Improvement */}
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <PenLine className="w-4 h-4 text-orange-600" />
+                    <span>Improve Content</span>
+                  </h3>
                   <textarea
                     value={improveInput}
                     onChange={(e) => setImproveInput(e.target.value)}
-                    placeholder="Paste existing bullet point to improve"
-                    rows="3"
-                    className="w-full p-3 border border-gray-200 rounded-lg text-sm bg-gray-50 focus:bg-white focus:border-orange-300 transition-colors mb-3 resize-none"
+                    placeholder="Paste text to improve (e.g., job description, summary)"
+                    rows="4"
+                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
                   />
                   <button
                     onClick={handleImproveContent}
-                    disabled={aiSuggestionLoading || !improveInput.trim()}
-                    className="w-full p-3 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white rounded-lg text-sm font-semibold disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center gap-2"
+                    disabled={aiSuggestionLoading}
+                    className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 text-white py-2 rounded-lg text-sm font-medium transition-colors"
                   >
-                    {aiSuggestionLoading ? (
-                      <>
-                        <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"/>
-                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
-                        </svg>
-                        Improving...
-                      </>
-                    ) : (
-                      <>
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/>
-                        </svg>
-                        Improve Content
-                      </>
-                    )}
+                    {aiSuggestionLoading ? 'Improving...' : 'Improve Content'}
                   </button>
                   {improvedText && (
-                    <div className="mt-3 p-3 bg-gradient-to-r from-orange-50 to-red-50 rounded-lg border border-orange-200">
-                      <p className="text-xs font-semibold text-orange-800 mb-2">Improved Version:</p>
-                      <p className="text-xs text-gray-700 mb-3">{improvedText}</p>
+                    <div className="p-3 bg-orange-50 rounded-lg">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">Improved Version:</h4>
+                      <p className="text-sm text-gray-600">{improvedText}</p>
                       <button
-                        onClick={() => setImproveInput(improvedText)}
-                        className="w-full px-3 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded text-xs font-semibold transition-colors"
+                        onClick={() => {
+                          navigator.clipboard.writeText(improvedText);
+                          alert('Copied to clipboard!');
+                        }}
+                        className="mt-2 px-3 py-1 bg-orange-600 text-white rounded text-xs hover:bg-orange-700 transition-colors"
                       >
-                        Use This
+                        Copy to Clipboard
                       </button>
                     </div>
                   )}
@@ -4580,10 +4719,193 @@ const App = () => {
               </div>
             </div>
           </div>
-        )}
+        ) : currentView === 'landing' ? (
+          <LandingPage onStart={() => setCurrentView('gallery')} />
+        ) : currentView === 'gallery' ? (
+          <div className="p-10 w-full max-w-6xl mx-auto">
+            {/* Back to Landing button in gallery */}
+            <div className="mb-8 flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Template gallery</p>
+                <h2 className="mt-2 text-2xl md:text-3xl font-semibold text-slate-50">Choose your resume style</h2>
+              </div>
+              <button
+                onClick={() => setCurrentView('landing')}
+                className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-slate-100 text-xs font-medium hover:bg-white/10 backdrop-blur-xl shadow-lg shadow-black/40"
+              >
+                ← Back to Landing
+              </button>
+            </div>
+
+            {/* Template cards grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6 md:gap-8 text-slate-50 items-stretch">
+              {/* Large feature card */}
+              <div className="lg:col-span-2">
+                <TiltCard onClick={() => { setSelectedTemplate('modern'); setCurrentView('editor'); }}>
+                  <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_24px_70px_rgba(0,0,0,0.65)] overflow-hidden p-6 flex flex-col justify-between">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.25em] text-slate-400">Featured</p>
+                        <h3 className="mt-2 text-xl font-semibold">Modern Resume</h3>
+                        <p className="mt-1 text-xs text-slate-400 max-w-xs">
+                          Clean, ATS-friendly layout with bold accent color, ideal for tech and product roles.
+                        </p>
+                      </div>
+                      <div className="h-16 w-16 rounded-2xl bg-gradient-to-br from-indigo-500 to-sky-400 shadow-lg shadow-indigo-500/50" />
+                    </div>
+                    <div className="mt-6 w-full h-32 rounded-2xl bg-slate-900/60 border border-white/10 flex">
+                      <div className="w-1/3 bg-[#E8DCC4]" />
+                      <div className="w-2/3 bg-slate-900/80 p-4 flex flex-col gap-2">
+                        <div className="h-2 w-16 rounded bg-slate-300/70" />
+                        <div className="h-2 w-24 rounded bg-slate-500/60" />
+                        <div className="h-2 w-20 rounded bg-slate-600/60" />
+                      </div>
+                    </div>
+                  </div>
+                </TiltCard>
+              </div>
+
+              {/* Creative Green */}
+              <TiltCard onClick={() => { setSelectedTemplate('creative'); setCurrentView('editor'); }}>
+                <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_18px_60px_rgba(0,0,0,0.7)] overflow-hidden p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Creative Green</h3>
+                    <span className="inline-flex h-7 w-7 rounded-full bg-emerald-500/20 border border-emerald-400/40" />
+                  </div>
+                  <div className="w-full h-24 flex rounded-2xl overflow-hidden bg-slate-900/60">
+                    <div className="w-1/3 bg-[#E8DCC4]" />
+                    <div className="w-2/3 bg-slate-900/80 p-3 flex flex-col gap-1.5">
+                      <div className="h-1.5 w-10 rounded bg-emerald-500/80" />
+                      <div className="h-1.5 w-16 rounded bg-slate-500/70" />
+                      <div className="h-1.5 w-12 rounded bg-slate-600/70" />
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">
+                    Playful yet professional, great for designers and creative roles.
+                  </p>
+                </div>
+              </TiltCard>
+
+              {/* Blue Geometric */}
+              <TiltCard onClick={() => { setSelectedTemplate('blue-geometric'); setCurrentView('editor'); }}>
+                <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_18px_60px_rgba(0,0,0,0.7)] overflow-hidden p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Blue Geometric</h3>
+                    <span className="inline-flex h-7 w-7 rounded-full bg-blue-500/20 border border-blue-400/40" />
+                  </div>
+                  <div className="w-full h-24 flex rounded-2xl overflow-hidden bg-slate-900/60">
+                    <div className="w-1/3 bg-blue-600" />
+                    <div className="w-2/3 bg-slate-900/80 p-3 flex flex-col gap-1.5">
+                      <div className="h-1.5 w-10 rounded bg-blue-400/80" />
+                      <div className="h-1.5 w-16 rounded bg-slate-500/70" />
+                      <div className="h-1.5 w-12 rounded bg-slate-600/70" />
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">
+                    Structured, geometric layout that stands out for engineering roles.
+                  </p>
+                </div>
+              </TiltCard>
+
+              {/* Playful Retro */}
+              <TiltCard onClick={() => { setSelectedTemplate('retro'); setCurrentView('editor'); }}>
+                <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_18px_60px_rgba(0,0,0,0.7)] overflow-hidden p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Playful Retro</h3>
+                    <span className="inline-flex h-7 w-7 rounded-full bg-amber-400/25 border border-amber-300/50" />
+                  </div>
+                  <div className="w-full h-24 flex rounded-2xl overflow-hidden bg-slate-900/60">
+                    <div className="w-1/3 bg-[#E8A87C]" />
+                    <div className="w-2/3 bg-slate-900/80 p-3 flex flex-col gap-1.5">
+                      <div className="h-1.5 w-10 rounded bg-amber-300/80" />
+                      <div className="h-1.5 w-16 rounded bg-slate-500/70" />
+                      <div className="h-1.5 w-12 rounded bg-slate-600/70" />
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">
+                    Warm color blocking with personality for creative resumes.
+                  </p>
+                </div>
+              </TiltCard>
+
+              {/* Minimalist Accountant */}
+              <TiltCard onClick={() => { setSelectedTemplate('accountant'); setCurrentView('editor'); }}>
+                <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_18px_60px_rgba(0,0,0,0.7)] overflow-hidden p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Minimalist Accountant</h3>
+                    <span className="inline-flex h-7 w-7 rounded-full bg-slate-300/20 border border-slate-200/40" />
+                  </div>
+                  <div className="w-full h-24 rounded-2xl overflow-hidden bg-slate-900/60 p-3 flex flex-col gap-1.5">
+                    <div className="h-1.5 w-10 rounded bg-slate-100/80" />
+                    <div className="h-1.5 w-16 rounded bg-slate-400/80" />
+                    <div className="h-1.5 w-20 rounded bg-slate-500/80" />
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">
+                    Strict, minimal layout tailored for finance and accounting roles.
+                  </p>
+                </div>
+              </TiltCard>
+
+              {/* Modern Playful */}
+              <TiltCard onClick={() => { setSelectedTemplate('modern-playful'); setCurrentView('editor'); }}>
+                <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_18px_60px_rgba(0,0,0,0.7)] overflow-hidden p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Modern Playful</h3>
+                    <span className="inline-flex h-7 w-7 rounded-full bg-indigo-400/25 border border-indigo-300/50" />
+                  </div>
+                  <div className="w-full h-24 rounded-2xl overflow-hidden bg-slate-900/60 p-3 flex flex-col gap-1.5">
+                    <div className="h-1.5 w-10 rounded bg-indigo-300/80" />
+                    <div className="h-1.5 w-16 rounded bg-slate-500/80" />
+                    <div className="h-1.5 w-20 rounded bg-slate-600/80" />
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">
+                    Rounded, soft layout that feels friendly yet professional.
+                  </p>
+                </div>
+              </TiltCard>
+
+              {/* New Playful Retro */}
+              <TiltCard onClick={() => { setSelectedTemplate('new-playful-retro'); setCurrentView('editor'); }}>
+                <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_18px_60px_rgba(0,0,0,0.7)] overflow-hidden p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">New Playful Retro</h3>
+                    <span className="inline-flex h-7 w-7 rounded-full bg-amber-300/25 border border-amber-200/50" />
+                  </div>
+                  <div className="w-full h-24 rounded-2xl overflow-hidden bg-slate-900/60 p-3 flex flex-col gap-1.5">
+                    <div className="h-1.5 w-10 rounded bg-amber-200/80" />
+                    <div className="h-1.5 w-16 rounded bg-slate-500/80" />
+                    <div className="h-1.5 w-20 rounded bg-slate-600/80" />
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">
+                    Refined retro palette with better balance and contrast.
+                  </p>
+                </div>
+              </TiltCard>
+
+              {/* Professional Contrast */}
+              <TiltCard onClick={() => { setSelectedTemplate('professional-black'); setCurrentView('editor'); }}>
+                <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_18px_60px_rgba(0,0,0,0.7)] overflow-hidden p-4 flex flex-col justify-between">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-sm font-semibold">Professional Contrast</h3>
+                    <span className="inline-flex h-7 w-7 rounded-full bg-yellow-400/25 border border-yellow-300/60" />
+                  </div>
+                  <div className="w-full h-24 flex rounded-2xl overflow-hidden bg-slate-900/60">
+                    <div className="w-1/3 bg-[#1a1a1a]" />
+                    <div className="w-2/3 bg-slate-900/80 p-3 flex flex-col gap-1.5">
+                      <div className="h-1.5 w-10 rounded bg-yellow-300/80" />
+                      <div className="h-1.5 w-16 rounded bg-slate-500/80" />
+                      <div className="h-1.5 w-20 rounded bg-slate-600/80" />
+                    </div>
+                  </div>
+                  <p className="mt-3 text-[11px] text-slate-400">
+                    High-contrast, black & gold styling for executive resumes.
+                  </p>
+                </div>
+              </TiltCard>
+            </div>
+          </div>
+        ) : null}
       </main>
-
-
     </div>
   );
 };
