@@ -26,12 +26,20 @@ const HeroVisual = () => {
   };
 
   useEffect(() => {
-    let renderer, scene, camera, points, plane;
-    let animationFrameId;
+    let cancelled = false;
+    let renderer = null;
+    let scene = null;
+    let camera = null;
+    let points = null;
+    let plane = null;
+    let animationFrameId = null;
+    let onMouseMove = null;
+    let handleResize = null;
+    let cleanupFromInit = () => {};
 
     const init = async () => {
       const THREE = await loadThree();
-      if (!THREE || !mountRef.current) return;
+      if (!THREE || !mountRef.current || cancelled) return;
 
       const width = mountRef.current.clientWidth;
       const height = mountRef.current.clientHeight;
@@ -42,6 +50,7 @@ const HeroVisual = () => {
       renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
       renderer.setPixelRatio(window.devicePixelRatio);
       renderer.setSize(width, height);
+      if (cancelled) return;
       mountRef.current.appendChild(renderer.domElement);
 
       // 2. Particle Field
@@ -89,7 +98,7 @@ const HeroVisual = () => {
       // 5. Interaction State
       let mouseX = 0,
         mouseY = 0;
-      const onMouseMove = (event) => {
+      onMouseMove = (event) => {
         mouseX = event.clientX / window.innerWidth - 0.5;
         mouseY = event.clientY / window.innerHeight - 0.5;
       };
@@ -98,6 +107,7 @@ const HeroVisual = () => {
       // 6. Animation Loop
       const animate = () => {
         animationFrameId = requestAnimationFrame(animate);
+        if (cancelled) return;
         const time = Date.now() * 0.001;
 
         // Rotate background particles
@@ -128,7 +138,7 @@ const HeroVisual = () => {
       animate();
 
       // 7. Responsive Resizing
-      const handleResize = () => {
+      handleResize = () => {
         if (!mountRef.current) return;
         const w = mountRef.current.clientWidth;
         const h = mountRef.current.clientHeight;
@@ -138,16 +148,28 @@ const HeroVisual = () => {
       };
       window.addEventListener('resize', handleResize);
 
-      // Cleanup
+      // Return cleanup so React can run it on unmount (listeners, animation, DOM, WebGL)
       return () => {
-        window.removeEventListener('mousemove', onMouseMove);
-        window.removeEventListener('resize', handleResize);
-        cancelAnimationFrame(animationFrameId);
-        if (mountRef.current) mountRef.current.innerHTML = '';
+        if (onMouseMove) window.removeEventListener('mousemove', onMouseMove);
+        if (handleResize) window.removeEventListener('resize', handleResize);
+        if (animationFrameId != null) cancelAnimationFrame(animationFrameId);
+        if (mountRef.current && renderer?.domElement?.parentNode === mountRef.current) {
+          mountRef.current.removeChild(renderer.domElement);
+        }
+        if (renderer) {
+          renderer.dispose();
+        }
       };
     };
 
-    init();
+    init().then((cleanupFn) => {
+      if (typeof cleanupFn === 'function') cleanupFromInit = cleanupFn;
+    });
+
+    return () => {
+      cancelled = true;
+      cleanupFromInit();
+    };
   }, []);
 
   return (

@@ -3980,7 +3980,7 @@ const App = () => {
             </div>
 
             {/* Template Note */}
-            {selectedTemplate === 'accountant' && (
+            {selectedTemplate === 'minimalist-accountant' && (
               <div className="mt-4 p-3 bg-white/10 rounded">
                 <p className="text-[10px] text-gray-400 mb-2">Note: This template uses a specific Garet font style for maximum professionalism.</p>
               </div>
@@ -4530,7 +4530,7 @@ const App = () => {
                   className="shadow-2xl bg-white transition-transform duration-300 ease-out border border-gray-200"
                   style={{
                     width: '210mm',
-                    minHeight: '297mm',
+                    // Let height follow content so there's no extra blank space
                     transform: 'scale(1)',
                     transformOrigin: 'top center',
                     overflowX: 'hidden'
@@ -4873,7 +4873,7 @@ const App = () => {
               </TiltCard>
 
               {/* Minimalist Accountant */}
-              <TiltCard onClick={() => { setSelectedTemplate('accountant'); setCurrentView('editor'); }}>
+              <TiltCard onClick={() => { setSelectedTemplate('minimalist-accountant'); setCurrentView('editor'); }}>
                 <div className="h-full rounded-3xl bg-white/5 border border-white/10 backdrop-blur-2xl shadow-[0_18px_60px_rgba(0,0,0,0.7)] overflow-hidden p-4 flex flex-col justify-between">
                   <div className="flex items-center justify-between mb-3">
                     <h3 className="text-sm font-semibold">Minimalist Accountant</h3>
