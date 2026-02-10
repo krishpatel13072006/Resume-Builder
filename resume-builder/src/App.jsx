@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, Suspense } from 'react';
 import { Phone, Mail, MapPin, Trash2, Globe, Github, Linkedin, Moon, Sun, FileText, ArrowRight, Sparkle, Wand2, ListChecks, Quote, PenLine, KeyRound } from 'lucide-react';
 import LoadingSpinner from './components/LoadingSpinner';
-import { suggestSkills, suggestBulletPoints, generateSummary, improveContent } from './api/genai';
+import { suggestSkills, suggestBulletPoints, generateSummary, generateOneLineSummary, improveContent } from './api/genai';
 import { LandingPage, HeroVisual } from './LandingPage';
 
 // Dynamic library loader
@@ -54,6 +54,7 @@ const App = () => {
   const [suggestedSkills, setSuggestedSkills] = useState([]);
   const [suggestedBullets, setSuggestedBullets] = useState([]);
   const [summaryText, setSummaryText] = useState('');
+  const [oneLineSummaryText, setOneLineSummaryText] = useState('');
   const [improvedText, setImprovedText] = useState('');
   const [aiSuggestionLoading, setAiSuggestionLoading] = useState(false);
 
@@ -498,6 +499,18 @@ const App = () => {
       setSummaryText(summary);
     } catch (error) {
       alert('Error generating summary: ' + error.message);
+    } finally {
+      setAiSuggestionLoading(false);
+    }
+  };
+
+  const handleGenerateOneLineSummary = async () => {
+    setAiSuggestionLoading(true);
+    try {
+      const oneLine = await generateOneLineSummary(formData, apiKey || undefined);
+      setOneLineSummaryText(oneLine);
+    } catch (error) {
+      alert('Error generating one-line summary: ' + error.message);
     } finally {
       setAiSuggestionLoading(false);
     }
@@ -3756,10 +3769,10 @@ const App = () => {
         <div className="absolute inset-0 opacity-[0.06] [background-image:linear-gradient(to_right,rgba(148,163,184,0.3)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.3)_1px,transparent_1px)] [background-size:56px_56px]" />
       </div>
 
-      {/* Guidance Button */}
+      {/* Guidance Button - top right corner */}
       <button
         onClick={() => setShowGuidance(true)}
-        className="fixed right-8 top-8 z-50 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-colors duration-200"
+        className="fixed top-4 right-4 left-auto z-50 bg-blue-600 hover:bg-blue-700 text-white p-3 rounded-full shadow-lg transition-colors duration-200"
         title="How to use this app"
       >
         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -4554,7 +4567,7 @@ const App = () => {
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
                     placeholder="Enter your Gemini API key"
-                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full p-3 border border-slate-500 rounded-lg text-sm text-white placeholder-slate-400 bg-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <button
                     onClick={() => {
@@ -4578,7 +4591,7 @@ const App = () => {
                     value={skillInput}
                     onChange={(e) => setSkillInput(e.target.value)}
                     placeholder="Enter job title or field (e.g., 'React Developer')"
-                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full p-3 border border-slate-500 rounded-lg text-sm text-white placeholder-slate-400 bg-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <button
                     onClick={handleSuggestSkills}
@@ -4616,14 +4629,14 @@ const App = () => {
                     value={roleInput}
                     onChange={(e) => setRoleInput(e.target.value)}
                     placeholder="Job role (e.g., 'Frontend Developer')"
-                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full p-3 border border-slate-500 rounded-lg text-sm text-white placeholder-slate-400 bg-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <input
                     type="text"
                     value={companyInput}
                     onChange={(e) => setCompanyInput(e.target.value)}
                     placeholder="Company name"
-                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full p-3 border border-slate-500 rounded-lg text-sm text-white placeholder-slate-400 bg-slate-800 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <button
                     onClick={handleSuggestBullets}
@@ -4680,6 +4693,37 @@ const App = () => {
                   )}
                 </div>
 
+                {/* Executive Summary (One Line) */}
+                <div className="space-y-3">
+                  <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                    <Quote className="w-4 h-4 text-cyan-600" />
+                    <span>Executive Summary (One Line)</span>
+                  </h3>
+                  <p className="text-xs text-gray-500">Generate a short headline-style summary for your resume.</p>
+                  <button
+                    onClick={handleGenerateOneLineSummary}
+                    disabled={aiSuggestionLoading}
+                    className="w-full bg-cyan-600 hover:bg-cyan-700 disabled:bg-gray-400 text-white py-2 rounded-lg text-sm font-medium transition-colors"
+                  >
+                    {aiSuggestionLoading ? 'Generating...' : 'Generate One-Line Summary'}
+                  </button>
+                  {oneLineSummaryText && (
+                    <div className="p-3 bg-cyan-50 rounded-lg">
+                      <h4 className="text-sm font-medium text-gray-700 mb-2">One-Line Summary:</h4>
+                      <p className="text-sm text-gray-600">{oneLineSummaryText}</p>
+                      <button
+                        onClick={() => {
+                          setFormData({ ...formData, about: oneLineSummaryText });
+                          setOneLineSummaryText('');
+                        }}
+                        className="mt-2 px-3 py-1 bg-cyan-600 text-white rounded text-xs hover:bg-cyan-700 transition-colors"
+                      >
+                        Use This Summary
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Content Improvement */}
                 <div className="space-y-3">
                   <h3 className="flex items-center gap-2 text-sm font-semibold text-gray-700">
@@ -4691,7 +4735,7 @@ const App = () => {
                     onChange={(e) => setImproveInput(e.target.value)}
                     placeholder="Paste text to improve (e.g., job description, summary)"
                     rows="4"
-                    className="w-full p-3 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
+                    className="w-full p-3 border border-slate-500 rounded-lg text-sm text-white placeholder-slate-400 bg-slate-800 focus:ring-2 focus:ring-orange-500 focus:border-transparent resize-none"
                   />
                   <button
                     onClick={handleImproveContent}

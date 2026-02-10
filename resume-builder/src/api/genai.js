@@ -46,6 +46,23 @@ export const generateSummary = async (formData, apiKey) => {
   return response.text().trim();
 };
 
+// 2b. Generate One-Line Executive Summary
+export const generateOneLineSummary = async (formData, apiKey) => {
+  const keyToUse = apiKey || getApiKey();
+  if (!keyToUse) throw new Error('API Key missing');
+  const genAI = new GoogleGenerativeAI(keyToUse);
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+
+  const skills = formData.techSkills?.languages?.join(', ') || 'General';
+  const prompt = `Write exactly one compelling sentence (max 25 words) for a resume headline/tagline for ${formData.title} named ${formData.name}.
+  Context: Education: ${formData.education?.[0]?.degree || 'N/A'}. Key skills: ${skills}.
+  Output: Only the one sentence, no quotes or labels.`;
+
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  return response.text().trim();
+};
+
 // 3. Improve Existing Text
 export const improveContent = async (text, apiKey) => {
   const keyToUse = apiKey || getApiKey();
