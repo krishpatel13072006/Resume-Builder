@@ -93,6 +93,17 @@ button:focus-visible {
   }
 }
 
+/* Smooth, minimal scroll experience (hide native scrollbar) */
+.nice-scroll {
+  scrollbar-width: none;           /* Firefox */
+  -ms-overflow-style: none;        /* IE/Edge */
+  position: relative;
+}
+
+.nice-scroll::-webkit-scrollbar {
+  display: none;                   /* Chrome/Safari */
+}
+
 /* Editable Field Indicators */
 [contenteditable="true"] {
   transition: all 0.2s ease;

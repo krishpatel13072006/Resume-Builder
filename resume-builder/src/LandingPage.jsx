@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react';
+import React, { useRef, useEffect, useState } from 'react';
 import { FileText, ArrowRight, Sparkle } from 'lucide-react';
 
 /**
@@ -31,7 +31,7 @@ const HeroVisual = () => {
     let scene = null;
     let camera = null;
     let points = null;
-    let plane = null;
+    let reactOrbital = null;
     let animationFrameId = null;
     let onMouseMove = null;
     let handleResize = null;
@@ -71,19 +71,70 @@ const HeroVisual = () => {
       points = new THREE.Points(particlesGeo, particlesMat);
       scene.add(points);
 
-      // 3. Floating Wireframe Plane
-      const planeGeo = new THREE.PlaneGeometry(3.5, 5, 40, 40);
-      const planeMat = new THREE.MeshPhongMaterial({
-        color: 0x4f46e5,
-        side: THREE.DoubleSide,
-        wireframe: true,
+      // 3. React-logo style orbitals
+      reactOrbital = new THREE.Group();
+
+      const ringGeoOuter = new THREE.TorusGeometry(2.2, 0.07, 32, 128);
+      const ringGeoInner = new THREE.TorusGeometry(1.6, 0.05, 32, 96);
+
+      const ringMatBright = new THREE.MeshPhongMaterial({
+        color: 0x60a5fa,
+        emissive: 0x1d4ed8,
+        emissiveIntensity: 0.7,
+        shininess: 90,
         transparent: true,
-        opacity: 0.15,
+        opacity: 0.95,
       });
-      plane = new THREE.Mesh(planeGeo, planeMat);
-      plane.rotation.x = -0.6;
-      plane.rotation.z = 0.1;
-      scene.add(plane);
+
+      const ringMatSoft = new THREE.MeshPhongMaterial({
+        color: 0x38bdf8,
+        emissive: 0x0ea5e9,
+        emissiveIntensity: 0.4,
+        shininess: 60,
+        transparent: true,
+        opacity: 0.6,
+      });
+
+      // Outer bright orbitals (classic React look) – oriented to face camera vertically
+      const ring1 = new THREE.Mesh(ringGeoOuter, ringMatBright);
+      ring1.rotation.set(0, 0, 0);
+
+      const ring2 = ring1.clone();
+      ring2.rotation.set(0, 0, Math.PI / 3);
+
+      const ring3 = ring1.clone();
+      ring3.rotation.set(0, 0, -Math.PI / 3);
+
+      // Inner softer orbitals for depth
+      const inner1 = new THREE.Mesh(ringGeoInner, ringMatSoft);
+      inner1.rotation.set(0, 0, 0);
+
+      const inner2 = inner1.clone();
+      inner2.rotation.set(0, 0, Math.PI / 3);
+
+      const inner3 = inner1.clone();
+      inner3.rotation.set(0, 0, -Math.PI / 3);
+
+      reactOrbital.add(ring1);
+      reactOrbital.add(ring2);
+      reactOrbital.add(ring3);
+      reactOrbital.add(inner1);
+      reactOrbital.add(inner2);
+      reactOrbital.add(inner3);
+
+      // central "nucleus"
+      const coreGeo = new THREE.SphereGeometry(0.3, 32, 32);
+      const coreMat = new THREE.MeshStandardMaterial({
+        color: 0x93c5fd,
+        emissive: 0x3b82f6,
+        emissiveIntensity: 0.9,
+        roughness: 0.3,
+        metalness: 0.4,
+      });
+      const core = new THREE.Mesh(coreGeo, coreMat);
+      reactOrbital.add(core);
+
+      scene.add(reactOrbital);
 
       // 4. Lighting
       const mainLight = new THREE.PointLight(0x6366f1, 1.5, 100);
@@ -114,23 +165,30 @@ const HeroVisual = () => {
         points.rotation.y += 0.0005;
         points.rotation.x += 0.0002;
 
-        // Animate Plane
-        if (plane) {
-          // Floating Y movement
-          plane.position.y = Math.sin(time * 0.5) * 0.2;
+        // Animate React-logo style orbitals
+        if (reactOrbital) {
+          // Gentle float
+          reactOrbital.position.y = Math.sin(time * 0.8) * 0.25;
 
-          // Reactive rotation based on mouse
-          plane.rotation.y = THREE.MathUtils.lerp(plane.rotation.y, mouseX * 0.5, 0.05);
-          plane.rotation.x = THREE.MathUtils.lerp(plane.rotation.x, -0.6 + mouseY * 0.3, 0.05);
+          // Rotate the whole group in all directions with cursor influence
+          const baseRotX = 0; // facing viewer vertically
+          const baseRotY = 0;
 
-          // Subtle wave effect on plane vertices
-          const vertices = plane.geometry.attributes.position.array;
-          for (let i = 0; i < vertices.length; i += 3) {
-            const x = vertices[i];
-            const y = vertices[i + 1];
-            vertices[i + 2] = Math.sin(x + time) * 0.1 + Math.cos(y + time) * 0.1;
-          }
-          plane.geometry.attributes.position.needsUpdate = true;
+          const targetRotY = baseRotY + mouseX * 1.0; // left/right movement
+          const targetRotX = baseRotX + mouseY * 1.0; // up/down movement
+
+          reactOrbital.rotation.y = THREE.MathUtils.lerp(reactOrbital.rotation.y, targetRotY, 0.08);
+          reactOrbital.rotation.x = THREE.MathUtils.lerp(reactOrbital.rotation.x, targetRotX, 0.08);
+
+          // Subtle continuous spin around Z for extra depth
+          reactOrbital.rotation.z += 0.01;
+
+          // Each ring also spins in place for extra motion
+          reactOrbital.children.forEach((child) => {
+            if (child.isMesh) {
+              child.rotation.z += 0.02;
+            }
+          });
         }
 
         renderer.render(scene, camera);
@@ -182,7 +240,44 @@ const HeroVisual = () => {
 };
 
 // --- LANDING PAGE ---
-const LandingPage = ({ onStart }) => (
+const LandingPage = ({ onStart }) => {
+  // Simple in-place chat bot for AI Writer section
+  const [showChatBot, setShowChatBot] = useState(false);
+  const [chatMessages, setChatMessages] = useState([
+    {
+      from: 'bot',
+      text: "Hi! I'm your resume AI helper. Tell me about your role, experience and what kind of job you want, and I'll suggest a summary line you can copy into your resume.",
+    },
+  ]);
+  const [chatInput, setChatInput] = useState('');
+
+  const buildBotReply = (userMessage) => {
+    const base =
+      "Here's a sample resume summary you can use or edit:\n\n";
+    const suggestion =
+      "Results-driven professional with relevant experience, combining strong technical skills with problem-solving and communication abilities to deliver high-quality work.";
+
+    return (
+      base +
+      `“${userMessage.trim() || 'Motivated candidate seeking opportunities to grow and contribute to a forward-thinking organization.'}”\n\n` +
+      suggestion
+    );
+  };
+
+  const handleSendMessage = (e) => {
+    e.preventDefault();
+    if (!chatInput.trim()) return;
+
+    const userText = chatInput.trim();
+    setChatMessages((prev) => [
+      ...prev,
+      { from: 'user', text: userText },
+      { from: 'bot', text: buildBotReply(userText) },
+    ]);
+    setChatInput('');
+  };
+
+  return (
   <div className="bg-[#020617] min-h-screen text-white font-sans overflow-x-hidden selection:bg-indigo-500/30">
     {/* Navbar */}
     <nav className="fixed top-0 left-0 right-0 z-50 flex justify-between items-center px-6 md:px-12 py-6 backdrop-blur-md border-b border-white/5">
@@ -296,12 +391,61 @@ const LandingPage = ({ onStart }) => (
         <div className="p-6 bg-white/5 rounded-2xl mb-8">
            <p className="text-sm text-slate-300 italic">"By beginning your resume summary with your professional title, you inform recruiters that your resume is relevant to their needs..."</p>
         </div>
-        <div className="flex items-center justify-center p-12 border-2 border-dashed border-white/10 rounded-3xl">
-           <button className="px-8 py-3 bg-indigo-600 rounded-xl font-bold">Do it for me</button>
+        <div className="flex items-center justify-center p-6 md:p-8 border-2 border-dashed border-white/10 rounded-3xl">
+          {!showChatBot ? (
+            <button
+              className="px-8 py-3 bg-indigo-600 rounded-xl font-bold"
+              onClick={() => setShowChatBot(true)}
+            >
+              Do it for me
+            </button>
+          ) : (
+            <div className="w-full max-w-md">
+              <div className="text-sm text-slate-300 mb-3 font-semibold">
+                Simple AI chat helper (no login or API key needed)
+              </div>
+              <div className="h-52 md:h-64 bg-slate-900/60 rounded-2xl p-3 overflow-y-auto text-xs space-y-2 border border-white/5">
+                {chatMessages.map((msg, idx) => (
+                  <div
+                    key={idx}
+                    className={`flex ${
+                      msg.from === 'user' ? 'justify-end' : 'justify-start'
+                    }`}
+                  >
+                    <div
+                      className={`px-3 py-2 rounded-xl max-w-[85%] whitespace-pre-wrap ${
+                        msg.from === 'user'
+                          ? 'bg-indigo-600 text-white'
+                          : 'bg-slate-800 text-slate-100'
+                      }`}
+                    >
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <form onSubmit={handleSendMessage} className="mt-3 flex gap-2">
+                <input
+                  type="text"
+                  className="flex-1 rounded-xl bg-slate-900/70 border border-white/10 px-3 py-2 text-xs text-white placeholder:text-slate-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                  placeholder="Describe your experience and target role..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                />
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 text-xs font-bold hover:bg-indigo-500 transition-colors"
+                >
+                  Send
+                </button>
+              </form>
+            </div>
+          )}
         </div>
       </div>
     </section>
   </div>
 );
+};
 
 export { HeroVisual, LandingPage };

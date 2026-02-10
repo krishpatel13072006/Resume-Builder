@@ -3754,7 +3754,7 @@ const App = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row relative text-black bg-slate-950">
+    <div className="min-h-screen w-full flex flex-col md:flex-row relative text-black bg-slate-950 overflow-x-hidden">
       {/* Modern gradient / glow background */}
       <div
         className="pointer-events-none absolute inset-0 -z-10 overflow-hidden"
@@ -3862,7 +3862,7 @@ const App = () => {
 
       {/* Customization Panel */}
       {currentView === 'editor' && (
-        <div className="w-full md:w-80 shadow-lg overflow-y-auto md:h-screen md:sticky md:top-0 bg-white text-black">
+        <div className="w-full md:w-80 h-screen md:h-screen shadow-lg bg-white text-black overflow-y-auto nice-scroll">
           <div className="p-6 space-y-6">
             {/* Header */}
             <div className="text-center">
@@ -4518,22 +4518,27 @@ const App = () => {
       )}
 
       {/* Main Content */}
-      <main className="flex-1 h-full overflow-y-auto">
+      <main
+        className={
+          currentView === 'editor'
+            ? 'flex-1 h-screen overflow-hidden'
+            : 'flex-1 min-h-screen overflow-y-auto'
+        }
+      >
         {currentView === 'editor' ? (
           <div className="flex flex-col lg:flex-row h-full bg-zinc-200">
             {/* Resume Preview - Left/Center */}
-            <div className="flex-1 p-4 md:p-8 flex justify-center items-start bg-zinc-200 overflow-y-auto overflow-x-hidden">
-              <div className="relative">
+            <div className="flex-1 h-screen p-4 md:p-8 flex justify-center items-start bg-zinc-200 overflow-y-auto nice-scroll">
+              <div className="relative w-full">
                 {/* Resume Container */}
                 <div
                   ref={resumeRef}
-                  className="shadow-2xl bg-white transition-transform duration-300 ease-out border border-gray-200"
+                  className="shadow-2xl bg-white transition-transform duration-300 ease-out border border-gray-200 w-full max-w-[210mm] mx-auto"
                   style={{
-                    width: '210mm',
                     // Let height follow content so there's no extra blank space
-                    transform: 'scale(1)',
                     transformOrigin: 'top center',
-                    overflowX: 'hidden'
+                    overflowX: 'hidden',
+                    width: '100%'
                   }}
                 >
                   {selectedTemplate === 'creative' && <CreativeGreenTemplate formData={formData} accentColor={accentColor} leftPanelColor={leftPanelColor} rightPanelColor={rightPanelColor} selectedFont={selectedFont} handleBlur={handleBlur} />}
@@ -4549,7 +4554,7 @@ const App = () => {
             </div>
 
             {/* AI Suggestions Panel - Right */}
-            <div className="w-full lg:w-96 h-full bg-white border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto">
+            <div className="w-full lg:w-96 h-screen bg-white border-t lg:border-t-0 lg:border-l border-gray-200 overflow-y-auto nice-scroll">
               <div className="p-6 space-y-6">
                 <div className="text-center">
                   <h2 className="text-xl font-bold text-gray-800 mb-2">AI Assistant</h2>
@@ -4766,7 +4771,7 @@ const App = () => {
         ) : currentView === 'landing' ? (
           <LandingPage onStart={() => setCurrentView('gallery')} />
         ) : currentView === 'gallery' ? (
-          <div className="p-10 w-full max-w-6xl mx-auto">
+          <div className="w-full max-w-6xl mx-auto px-4 py-8 md:p-10">
             {/* Back to Landing button in gallery */}
             <div className="mb-8 flex items-center justify-between">
               <div>
